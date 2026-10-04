@@ -8,7 +8,7 @@
 // @include      https://reddit.com/*
 // @grant        none
 // @run-at       document-end
-// @updateURL    https://github.com/Maxwells-Demon/customRedditUserscript/customRedditUserscript.js
+// @updateURL    https://raw.githubusercontent.com/Maxwells-Demon/customRedditUserscript/refs/heads/main/customRedditUserscript.js
 // ==/UserScript==
 
 let thumbnail_width = 50;
