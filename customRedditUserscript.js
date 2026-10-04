@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.5
+// @version      0.6
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -264,13 +264,21 @@ let thumbnail_width = 50;
             collapseBtn.textContent = open ? "✕" : "☰";
         }
 
-        // Desktop: keep the original hover behaviour.
-        root.addEventListener("mouseenter", () => setPanelOpen(true));
-        root.addEventListener("mouseleave", () => setPanelOpen(false));
+        // Desktop: keep the original hover behaviour only on devices that
+        // actually have a fine pointer and hover capability. Android browsers
+        // can synthesize mouse events for touch input, which would otherwise
+        // immediately reopen/close the panel during a tap.
+        const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        if (canHover) {
+            root.addEventListener("mouseenter", () => setPanelOpen(true));
+            root.addEventListener("mouseleave", () => setPanelOpen(false));
+        }
 
-        // Touch/mobile: tapping the menu button explicitly toggles the panel.
-        // Do not attach this to the whole root, otherwise tapping a control
-        // inside the panel would toggle it as well.
+        // Touch/mobile and keyboard/mouse: tapping/clicking the menu button
+        // explicitly toggles the panel. Do not attach this to the whole root,
+        // otherwise tapping a control inside the panel would toggle it too.
+        collapseBtn.style.cursor = "pointer";
+        collapseBtn.style.touchAction = "manipulation";
         collapseBtn.addEventListener("click", event => {
             event.preventDefault();
             event.stopPropagation();
