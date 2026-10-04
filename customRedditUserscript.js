@@ -344,25 +344,6 @@ let thumbnail_width = 50;
         localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
     }
 
-
-    // ── Custom account switcher ─────────────────────────────────────────────
-    const ACCOUNT_STORAGE_KEY = "customRedditUserscript.accounts";
-
-    function loadAccounts() {
-        try {
-            const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
-            return Array.isArray(accounts) ? accounts.filter(a =>
-                a && typeof a.username === "string" && typeof a.password === "string"
-            ) : [];
-        } catch (_) {
-            return [];
-        }
-    }
-
-    function saveAccounts(accounts) {
-        localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
-    }
-
     async function loginToAccount(account, otp) {
         const data = new URLSearchParams();
         data.set("user", account.username);
@@ -653,100 +634,6 @@ let thumbnail_width = 50;
                 removeBtn.style.flexShrink = "0";
                 row.appendChild(removeBtn);
 
-                accountList.appendChild(row);
-            });
-        }
-
-        renderAccounts();
-
-        // ── Custom account switcher ───────────────────────────────────────────
-        panel.appendChild(makeHR());
-
-        const accountTitle = el("div", "font-weight:bold; text-align:center; color:#aaa;", "Accounts");
-        panel.appendChild(accountTitle);
-
-        const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
-        panel.appendChild(accountStatus);
-
-        const accountUser = el("input", BASE_INPUT + "width:100%;");
-        accountUser.type = "text";
-        accountUser.autocomplete = "username";
-        accountUser.placeholder = "username";
-        panel.appendChild(accountUser);
-
-        const accountPassword = el("input", BASE_INPUT + "width:100%;");
-        accountPassword.type = "password";
-        accountPassword.autocomplete = "current-password";
-        accountPassword.placeholder = "password";
-        panel.appendChild(accountPassword);
-
-        const accountOtp = el("input", BASE_INPUT + "width:100%;");
-        accountOtp.type = "text";
-        accountOtp.inputMode = "numeric";
-        accountOtp.autocomplete = "one-time-code";
-        accountOtp.placeholder = "2FA code (optional)";
-        panel.appendChild(accountOtp);
-
-        const accountAddBtn = makeWideBtn("Add / Update Account", () => {
-            const username = accountUser.value.trim();
-            const password = accountPassword.value;
-            if (!username || !password) {
-                accountStatus.textContent = "Username and password required.";
-                return;
-            }
-
-            const accounts = loadAccounts();
-            const existing = accounts.findIndex(a => a.username.toLowerCase() === username.toLowerCase());
-            const account = { username, password };
-            if (existing >= 0) accounts[existing] = account;
-            else accounts.push(account);
-
-            saveAccounts(accounts);
-            accountPassword.value = "";
-            accountStatus.textContent = "Account saved.";
-            renderAccounts();
-        });
-        panel.appendChild(accountAddBtn);
-
-        const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
-        panel.appendChild(accountList);
-
-        function renderAccounts() {
-            accountList.textContent = "";
-            const accounts = loadAccounts();
-
-            if (!accounts.length) {
-                accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
-                return;
-            }
-
-            accounts.forEach((account, index) => {
-                const row = el("div", "display:flex; align-items:center; gap:2px; width:100%;");
-                row.appendChild(el("div", "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ccc;", account.username));
-
-                const switchBtn = makeWideBtn("Switch", async () => {
-                    accountStatus.textContent = "Switching...";
-                    try {
-                        await loginToAccount(account, accountOtp.value.trim());
-                    } catch (error) {
-                        accountStatus.textContent = error && error.message ? error.message : "Account switch failed.";
-                    }
-                });
-                switchBtn.style.width = "55px";
-                switchBtn.style.flexShrink = "0";
-                row.appendChild(switchBtn);
-
-                const removeBtn = makeWideBtn("×", () => {
-                    const current = loadAccounts();
-                    current.splice(index, 1);
-                    saveAccounts(current);
-                    renderAccounts();
-                    accountStatus.textContent = "Account removed.";
-                });
-                removeBtn.title = "Remove saved account";
-                removeBtn.style.width = "24px";
-                removeBtn.style.flexShrink = "0";
-                row.appendChild(removeBtn);
                 accountList.appendChild(row);
             });
         }
