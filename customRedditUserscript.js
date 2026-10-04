@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.7
+// @version      0.8
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -32,11 +32,64 @@ let thumbnail_width = 50;
         flair:    "",
     };
 
+    function getPosts() {
+        return [...document.querySelectorAll(".thing[data-type='link'], .thing.link")];
+    }
+
+    function getPostScore(post) {
+        const dataScore = post.dataset.score || post.getAttribute("data-score");
+        if (dataScore !== null && dataScore !== undefined && dataScore !== "") {
+            const score = parseInt(dataScore, 10);
+            if (!isNaN(score)) return score;
+        }
+
+        const scoreEl = post.querySelector(".score.unvoted, .score.likes, .score.dislikes");
+        if (!scoreEl) return null;
+        const text = scoreEl.textContent.trim().replace(/,/g, "");
+        const score = parseInt(text, 10);
+        return isNaN(score) ? null : score;
+    }
+
+    function getPostTimestamp(post) {
+        let raw = post.dataset.timestamp || post.getAttribute("data-timestamp");
+
+        if (!raw) {
+            const timeEl = post.querySelector("time[datetime], .live-timestamp[data-ts]");
+            if (timeEl) {
+                raw = timeEl.getAttribute("datetime") || timeEl.getAttribute("data-ts");
+            }
+        }
+
+        if (!raw) return null;
+
+        const numeric = Number(raw);
+        if (!isNaN(numeric)) {
+            // Reddit has used both seconds and milliseconds in old-style markup.
+            return numeric < 1e12 ? numeric * 1000 : numeric;
+        }
+
+        const parsed = Date.parse(raw);
+        return isNaN(parsed) ? null : parsed;
+    }
+
+    function getPostUrl(post) {
+        const dataUrl = post.dataset.url || post.getAttribute("data-url");
+        if (dataUrl) return dataUrl;
+
+        const titleEl = post.querySelector("a.title");
+        return titleEl ? titleEl.href : "";
+    }
+
+    function getPostFlair(post) {
+        const flairEl = post.querySelector(".linkflairlabel, .flair");
+        return flairEl ? flairEl.textContent.trim() : "";
+    }
+
     function getPostDuplicateKey(post) {
         const fullname = post.dataset.fullname || post.getAttribute("data-fullname");
         if (fullname) return "fullname:" + fullname;
 
-        const url = post.dataset.url || post.getAttribute("data-url");
+        const url = getPostUrl(post);
         if (url) {
             try {
                 return "url:" + new URL(url, window.location.href).href;
@@ -52,21 +105,21 @@ let thumbnail_width = 50;
 
     function applyFilters() {
         const now = Date.now();
-        const posts = [...document.querySelectorAll("#siteTable .thing[data-type='link']")];
+        const posts = getPosts();
         const visibleKeys = new Set();
 
         posts.forEach(post => {
             let show = true;
 
             if (filters.minScore !== null) {
-                const score = parseInt(post.dataset.score, 10);
-                if (isNaN(score) || score < filters.minScore) show = false;
+                const score = getPostScore(post);
+                if (score === null || score < filters.minScore) show = false;
             }
 
             if (show && filters.maxAge !== null) {
-                const ts = parseInt(post.dataset.timestamp, 10);
-                const ageDays = (now - ts) / 86_400_000;
-                if (isNaN(ts) || ageDays > filters.maxAge) show = false;
+                const timestamp = getPostTimestamp(post);
+                const ageDays = timestamp === null ? Infinity : (now - timestamp) / 86_400_000;
+                if (timestamp === null || ageDays > filters.maxAge) show = false;
             }
 
             if (show && filters.title) {
@@ -76,13 +129,12 @@ let thumbnail_width = 50;
             }
 
             if (show && filters.url) {
-                const url = (post.dataset.url || "").toLowerCase();
+                const url = getPostUrl(post).toLowerCase();
                 if (!url.includes(filters.url.toLowerCase())) show = false;
             }
 
             if (show && filters.flair) {
-                const flairEl = post.querySelector(".linkflairlabel");
-                const flairText = flairEl ? flairEl.textContent.toLowerCase() : "";
+                const flairText = getPostFlair(post).toLowerCase();
                 if (!flairText.includes(filters.flair.toLowerCase())) show = false;
             }
 
@@ -97,14 +149,31 @@ let thumbnail_width = 50;
                 }
             }
 
-            post.style.display = show ? "block" : "none";
+            post.style.display = show ? "" : "none";
         });
     }
 
-    const observer = new MutationObserver(() => applyFilters());
-    waitForElement("#siteTable", el => {
-        observer.observe(el, { childList: true, subtree: true });
+    let filterApplyQueued = false;
+    const observer = new MutationObserver(() => {
+        if (filterApplyQueued) return;
+        filterApplyQueued = true;
+        requestAnimationFrame(() => {
+            filterApplyQueued = false;
+            applyFilters();
+        });
     });
+
+    function startFilterObserver() {
+        if (!document.body) return;
+        observer.observe(document.body, { childList: true, subtree: true });
+        applyFilters();
+    }
+
+    if (document.body) {
+        startFilterObserver();
+    } else {
+        waitForElement("body", startFilterObserver);
+    }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
 
