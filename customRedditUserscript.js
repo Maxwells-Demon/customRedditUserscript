@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.8
+// @version      1.9
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -347,13 +347,96 @@ let thumbnail_width = 50;
     const LOGIN_HINT_KEY = "customRedditUserscript.loginHint";
     const LOGIN_PENDING_KEY = "customRedditUserscript.loginPending";
 
+    function findLogoutControl() {
+        const selectors = [
+            'a[href*="logout"]',
+            'button[data-testid="logout-button"]',
+            '[data-menuitem-identifier="logout"]',
+            '[role="menuitem"][aria-label*="log out" i]',
+            '[role="menuitem"][aria-label*="logout" i]'
+        ];
+
+        for (const selector of selectors) {
+            const element = [...document.querySelectorAll(selector)]
+                .find(element => !rootContains(element));
+            if (element) return element;
+        }
+
+        const elements = [...document.querySelectorAll(
+            'button, a, [role="button"], [role="menuitem"], [tabindex]'
+        )];
+
+        return elements.find(element => {
+            if (rootContains(element)) return false;
+            const text = (element.textContent || "").trim().replace(/\\s+/g, " ");
+            const label = element.getAttribute("aria-label") || "";
+            return /^(log ?out|sign ?out)$/i.test(text) ||
+                /\\b(log ?out|sign ?out)\\b/i.test(label);
+        }) || null;
+    }
+
+    function rootContains(element) {
+        return typeof root !== "undefined" && root.contains(element);
+    }
+
+    function openRedditProfileMenu() {
+        const candidates = [
+            'button[aria-label*="user" i]',
+            'button[aria-label*="account" i]',
+            'button[aria-label*="profile" i]',
+            '[data-testid*="user" i][role="button"]',
+            '[data-testid*="account" i][role="button"]',
+            '[id*="header-action-item" i]'
+        ];
+
+        for (const selector of candidates) {
+            const element = [...document.querySelectorAll(selector)]
+                .find(element => !rootContains(element));
+            if (element) {
+                element.click();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function logoutThroughRedditUI(onReady) {
+        const existingLogout = findLogoutControl();
+        if (existingLogout) {
+            onReady(existingLogout);
+            return;
+        }
+
+        if (!openRedditProfileMenu()) {
+            throw new Error("Reddit profile menu not found.");
+        }
+
+        const started = Date.now();
+        const interval = setInterval(() => {
+            const logout = findLogoutControl();
+            if (logout) {
+                clearInterval(interval);
+                onReady(logout);
+                return;
+            }
+
+            if (Date.now() - started >= 5000) {
+                clearInterval(interval);
+                throw new Error("Reddit logout control not found.");
+            }
+        }, 100);
+    }
+
     async function loginToAccount(account) {
         sessionStorage.setItem(LOGIN_HINT_KEY, account.username);
         sessionStorage.setItem(LOGIN_PENDING_KEY, "1");
 
-        // Reddit's login page reuses an existing session. Log out first so
-        // the switch cannot simply return to the currently active account.
-        window.location.assign("https://old.reddit.com/logout");
+        // Reddit currently blocks direct logout URLs. Use Reddit's own profile
+        // menu and logout control so the browser follows the supported flow.
+        logoutThroughRedditUI(logout => {
+            logout.click();
+        });
     }
 
     function handleLoginHint() {
@@ -366,7 +449,7 @@ let thumbnail_width = 50;
         if (!isLoginPage) {
             // /logout may redirect to the front page. Continue to the native
             // login page after the old Reddit session has been terminated.
-            window.location.replace("https://old.reddit.com/login/?dest=https%3A%2F%2Fwww.reddit.com%2F");
+            window.location.replace("/login/?dest=https%3A%2F%2Fwww.reddit.com%2F");
             return;
         }
 
