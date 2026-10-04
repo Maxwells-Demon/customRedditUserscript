@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.8
+// @version      0.9
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -199,24 +199,28 @@ let thumbnail_width = 50;
     }
 
     function makeWideBtn(text, onclick) {
-        const b = el("div", `
+        const b = el("button", `
             box-sizing:border-box; width:100%; padding:3px 0; text-align:center;
             background:#2a2a2a; border:1px solid #555; border-radius:3px;
             color:#ccc; cursor:pointer; font-family:monospace; font-size:11px;
-            user-select:none;
+            user-select:none; touch-action:manipulation; appearance:none;
         `, text);
+        b.type = "button";
         b.onclick = onclick;
         return b;
     }
 
     // btn that shows its step label, e.g. "10", "1k", "1h"
     function makeStepBtn(label) {
-        return el("div", `
+        const b = el("button", `
             box-sizing:border-box; background:#2a2a2a; border:1px solid #555;
             border-radius:3px; color:#aaa; cursor:pointer; font-family:monospace;
             font-size:9px; text-align:center; user-select:none; flex-shrink:0;
-            width:20px; height:22px; line-height:22px;
+            width:20px; height:22px; line-height:20px; padding:0;
+            touch-action:manipulation; appearance:none;
         `, label);
+        b.type = "button";
+        return b;
     }
 
     // Multi-step stepper:
