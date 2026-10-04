@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.9
+// @version      1.0
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -289,6 +289,61 @@ let thumbnail_width = 50;
         return { el: inp, reset: () => { inp.value = ""; } };
     }
 
+    // ── Custom account switcher ─────────────────────────────────────────────
+    const ACCOUNT_STORAGE_KEY = "customRedditUserscript.accounts";
+
+    function loadAccounts() {
+        try {
+            const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
+            return Array.isArray(accounts) ? accounts.filter(a =>
+                a && typeof a.username === "string" && typeof a.password === "string"
+            ) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function saveAccounts(accounts) {
+        localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+    }
+
+    async function loginToAccount(account, otp) {
+        const data = new URLSearchParams();
+        data.set("user", account.username);
+        data.set("passwd", account.password);
+        data.set("rem", "on");
+        data.set("api_type", "json");
+        if (otp) data.set("otp", otp);
+
+        const response = await fetch("/api/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: data.toString(),
+        });
+
+        let result = null;
+        try {
+            result = await response.json();
+        } catch (_) {
+            throw new Error("Reddit returned a non-JSON login response.");
+        }
+
+        const errors = result && result.json && result.json.errors;
+        if (!response.ok || (Array.isArray(errors) && errors.length)) {
+            const message = Array.isArray(errors) && errors.length
+                ? errors.map(error => Array.isArray(error) ? error[1] : String(error)).join("; ")
+                : "Reddit rejected the login request.";
+            throw new Error(message);
+        }
+
+        if (result && result.success === false) {
+            throw new Error("Reddit rejected the login request.");
+        }
+
+        window.location.reload();
+    }
+
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
         const css = "body{overflow-x:hidden;} #eu-cookie-policy{display:none;} #progressIndicator{flex-grow:1;} body.with-listing-chooser>.content,body.with-listing-chooser .footer-parent{margin-left:100px;} .listing-chooser{position:fixed!important;overflow:auto!important;top:0!important;} .with-listing-chooser .listing-chooser.initialized{width:100px;padding-right:0;} .listing-chooser ul.multis li{margin-bottom:1px;margin-top:0;margin-left:0;border:0 solid #ccc;border-radius:5px;} .listing-chooser ul.multis li a{padding:.2em 1px;padding-left:3px;} .listing-chooser ul.multis li:hover{margin-left:5px;} .listing-chooser li{border-radius:5px;} .listing-chooser .contents{margin-top:0!important;} .listing-chooser li.selected{margin-right:0;padding-right:0;} .promoted{display:none;} .link{margin-bottom:1px;background-color:rgb(0 0 0/25%)!important;width:99%;margin-left:5px;flex-grow:2;} .link .flat-list{padding:0;} .link .title{font-size:small;font-weight:normal;margin-bottom:0;} .noCtrlF{display:none;} .post-crosspost-button{display:none;} .report-button{display:none!important;} .post-sharing-button{display:none;} .give-gold{display:none;} .entry .buttons li+li{padding-left:0;} .entry .buttons li{padding-right:2px;line-height:1em;} .thumbnail{width:70px;margin-right:10px;margin-bottom:0;} .thumbnail img{width:100%!important;height:auto!important;} .rank{display:none;} .midcol-spacer{width:0!important;} .midcol{margin:0!important;} .grippy{display:none!important;} .NERPageMarker{flex-grow:1;width:100%;} .md{max-width:100%;} .usertext-body{width:50%;} .arrow{margin:1px 0 0 0;}";
@@ -422,6 +477,109 @@ let thumbnail_width = 50;
             if (grippy) grippy.click();
         });
         panel.appendChild(multiredditSidebarBtn);
+
+        // ── Custom account switcher ───────────────────────────────────────────
+        panel.appendChild(makeHR());
+
+        const accountTitle = el("div", "font-weight:bold; text-align:center; color:#aaa;", "Accounts");
+        panel.appendChild(accountTitle);
+
+        const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
+        panel.appendChild(accountStatus);
+
+        const accountUser = el("input", BASE_INPUT + "width:100%;");
+        accountUser.type = "text";
+        accountUser.autocomplete = "username";
+        accountUser.placeholder = "username";
+        accountUser.inputMode = "text";
+        panel.appendChild(accountUser);
+
+        const accountPassword = el("input", BASE_INPUT + "width:100%;");
+        accountPassword.type = "password";
+        accountPassword.autocomplete = "current-password";
+        accountPassword.placeholder = "password";
+        panel.appendChild(accountPassword);
+
+        const accountOtp = el("input", BASE_INPUT + "width:100%;");
+        accountOtp.type = "text";
+        accountOtp.inputMode = "numeric";
+        accountOtp.autocomplete = "one-time-code";
+        accountOtp.placeholder = "2FA code (optional)";
+        panel.appendChild(accountOtp);
+
+        const accountAddBtn = makeWideBtn("Add / Update Account", () => {
+            const username = accountUser.value.trim();
+            const password = accountPassword.value;
+            if (!username || !password) {
+                accountStatus.textContent = "Username and password required.";
+                return;
+            }
+
+            const accounts = loadAccounts();
+            const existing = accounts.findIndex(a =>
+                a.username.toLowerCase() === username.toLowerCase()
+            );
+            const account = { username, password };
+
+            if (existing >= 0) accounts[existing] = account;
+            else accounts.push(account);
+
+            saveAccounts(accounts);
+            accountPassword.value = "";
+            accountStatus.textContent = "Account saved.";
+            renderAccounts();
+        });
+        panel.appendChild(accountAddBtn);
+
+        const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
+        panel.appendChild(accountList);
+
+        function renderAccounts() {
+            accountList.textContent = "";
+            const accounts = loadAccounts();
+
+            if (!accounts.length) {
+                accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
+                return;
+            }
+
+            accounts.forEach((account, index) => {
+                const row = el("div", "display:flex; align-items:center; gap:2px; width:100%;");
+
+                const name = el("div", "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ccc;", account.username);
+                row.appendChild(name);
+
+                const switchBtn = makeWideBtn("Switch", async () => {
+                    accountStatus.textContent = "Switching...";
+                    try {
+                        await loginToAccount(account, accountOtp.value.trim());
+                    } catch (error) {
+                        accountStatus.textContent = error && error.message
+                            ? error.message
+                            : "Account switch failed.";
+                    }
+                });
+                switchBtn.style.width = "55px";
+                switchBtn.style.flexShrink = "0";
+                row.appendChild(switchBtn);
+
+                const removeBtn = makeWideBtn("×", () => {
+                    const current = loadAccounts();
+                    current.splice(index, 1);
+                    saveAccounts(current);
+                    renderAccounts();
+                    accountStatus.textContent = "Account removed.";
+                });
+                removeBtn.title = "Remove saved account";
+                removeBtn.style.width = "24px";
+                removeBtn.style.flexShrink = "0";
+                row.appendChild(removeBtn);
+
+                accountList.appendChild(row);
+            });
+        }
+
+        renderAccounts();
 
         // ── Filters ───────────────────────────────────────────────────────────
         panel.appendChild(makeHR());
