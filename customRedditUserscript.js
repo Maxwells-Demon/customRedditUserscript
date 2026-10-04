@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.4
+// @version      0.5
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -256,13 +256,25 @@ let thumbnail_width = 50;
             padding:8px;
         `);
 
-        root.addEventListener("mouseenter", () => {
-            panel.style.display = "flex";
-            collapseBtn.textContent = "✕";
-        });
-        root.addEventListener("mouseleave", () => {
-            panel.style.display = "none";
-            collapseBtn.textContent = "☰";
+        let panelOpen = false;
+
+        function setPanelOpen(open) {
+            panelOpen = open;
+            panel.style.display = open ? "flex" : "none";
+            collapseBtn.textContent = open ? "✕" : "☰";
+        }
+
+        // Desktop: keep the original hover behaviour.
+        root.addEventListener("mouseenter", () => setPanelOpen(true));
+        root.addEventListener("mouseleave", () => setPanelOpen(false));
+
+        // Touch/mobile: tapping the menu button explicitly toggles the panel.
+        // Do not attach this to the whole root, otherwise tapping a control
+        // inside the panel would toggle it as well.
+        collapseBtn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            setPanelOpen(!panelOpen);
         });
 
         // ── Thumbnail zoom ────────────────────────────────────────────────────
