@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.2
+// @version      0.3
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -32,9 +32,30 @@ let thumbnail_width = 50;
         flair:    "",
     };
 
+    function getPostDuplicateKey(post) {
+        const fullname = post.dataset.fullname || post.getAttribute("data-fullname");
+        if (fullname) return "fullname:" + fullname;
+
+        const url = post.dataset.url || post.getAttribute("data-url");
+        if (url) {
+            try {
+                return "url:" + new URL(url, window.location.href).href;
+            } catch (_) {
+                return "url:" + url;
+            }
+        }
+
+        const titleEl = post.querySelector("a.title");
+        const title = titleEl ? titleEl.textContent.trim().toLowerCase() : "";
+        return title ? "title:" + title : null;
+    }
+
     function applyFilters() {
         const now = Date.now();
-        document.querySelectorAll("#siteTable .thing[data-type='link']").forEach(post => {
+        const posts = [...document.querySelectorAll("#siteTable .thing[data-type='link']")];
+        const visibleKeys = new Set();
+
+        posts.forEach(post => {
             let show = true;
 
             if (filters.minScore !== null) {
@@ -63,6 +84,17 @@ let thumbnail_width = 50;
                 const flairEl = post.querySelector(".linkflairlabel");
                 const flairText = flairEl ? flairEl.textContent.toLowerCase() : "";
                 if (!flairText.includes(filters.flair.toLowerCase())) show = false;
+            }
+
+            if (show) {
+                const key = getPostDuplicateKey(post);
+                if (key) {
+                    if (visibleKeys.has(key)) {
+                        show = false;
+                    } else {
+                        visibleKeys.add(key);
+                    }
+                }
             }
 
             post.style.display = show ? "block" : "none";
