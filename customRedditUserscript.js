@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.1
+// @version      0.2
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -8,7 +8,6 @@
 // @include      https://reddit.com/*
 // @grant        none
 // @run-at       document-end
-// @updateURL    https://raw.githubusercontent.com/Maxwells-Demon/customRedditUserscript/refs/heads/main/customRedditUserscript.js
 // ==/UserScript==
 
 let thumbnail_width = 50;
