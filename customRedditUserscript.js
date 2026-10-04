@@ -265,14 +265,26 @@ let thumbnail_width = 50;
         panel.appendChild(thumbRow);
 
         // ── Sidebar toggle ────────────────────────────────────────────────────
-        panel.appendChild(makeHR());
         let sidebarVisible = false;
-        const sideBtn = makeWideBtn("Show Sidebar", () => {
-            sidebarVisible = !sidebarVisible;
+        const setSidebarVisible = visible => {
+            sidebarVisible = visible;
             sidebarCSS.innerHTML = sidebarVisible ? ".side{display:unset!important;}" : ".side{display:none!important;}";
-            sideBtn.textContent  = sidebarVisible ? "Hide Sidebar" : "Show Sidebar";
-        });
-        panel.appendChild(sideBtn);
+            sideBtn.textContent = sidebarVisible ? "Hide Sidebar" : "Show Sidebar";
+            sidebarBtn.textContent = sidebarVisible ? "◀" : "▶";
+            sidebarBtn.title = sidebarVisible ? "Hide sidebar" : "Show sidebar";
+        };
+
+        const sidebarBtn = el("div", `
+            box-sizing:border-box; width:22px; height:22px; line-height:20px;
+            text-align:center; background:#2a2a2a; border:1px solid #555;
+            border-radius:3px; color:#ccc; cursor:pointer; font-family:monospace;
+            font-size:13px; user-select:none;
+        `, "▶");
+        sidebarBtn.title = "Show sidebar";
+        sidebarBtn.onclick = () => setSidebarVisible(!sidebarVisible);
+
+        panel.appendChild(makeHR());
+        const sideBtn = makeWideBtn("Show Sidebar", () => setSidebarVisible(!sidebarVisible));
 
         // ── Filters ───────────────────────────────────────────────────────────
         panel.appendChild(makeHR());
@@ -341,6 +353,7 @@ let thumbnail_width = 50;
         }));
 
         root.appendChild(panel);
+        root.appendChild(sidebarBtn);
         root.appendChild(collapseBtn);
     })();
 })();
