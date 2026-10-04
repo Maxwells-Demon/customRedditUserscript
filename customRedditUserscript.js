@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.3
+// @version      1.4
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -344,63 +344,37 @@ let thumbnail_width = 50;
         localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
     }
 
-    async function loginToAccount(account, otp) {
-        const data = new URLSearchParams();
-        data.set("user", account.username);
-        data.set("passwd", account.password);
-        data.set("rem", "on");
-        data.set("api_type", "json");
-        if (otp) data.set("otp", otp);
+    async function loginToAccount(account) {
+        const destination = window.location.href;
+        const loginUrl = "/login/?dest=" + encodeURIComponent(destination);
 
-        const response = await fetch("/api/login", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: data.toString(),
-        });
-
-        const responseText = await response.text();
-        let result = null;
-        try {
-            result = JSON.parse(responseText);
-        } catch (_) {}
-
-        const errors = result && result.json && result.json.errors;
-        if (!response.ok || (Array.isArray(errors) && errors.length)) {
-            const message = Array.isArray(errors) && errors.length
-                ? errors.map(error => Array.isArray(error) ? error[1] : String(error)).join("; ")
-                : "Reddit rejected the login request.";
-            throw new Error(message);
-        }
-
-        if (result && result.success === false) {
-            throw new Error("Reddit rejected the login request.");
-        }
-
-        const meResponse = await fetch("/api/me.json", {
-            method: "GET",
-            credentials: "same-origin",
-            cache: "no-store",
-        });
-
-        let me = null;
-        try {
-            me = await meResponse.json();
-        } catch (_) {
-            throw new Error("Reddit did not return the current account as JSON.");
-        }
-
-        const activeUsername = me && me.name;
-        if (!meResponse.ok || !activeUsername) {
-            throw new Error("Reddit did not authenticate the account.");
-        }
-
-        if (activeUsername.toLowerCase() !== account.username.toLowerCase()) {
-            throw new Error("Reddit authenticated a different account.");
-        }
-
-        window.location.reload();
+        // Reddit's current authentication uses its native login surface,
+        // including CAPTCHA and account-specific 2FA. The legacy /api/login
+        // password endpoint is no longer a reliable browser login mechanism.
+        // Do not attempt to bypass those controls from the userscript.
+        sessionStorage.setItem("customRedditUserscript.loginHint", account.username);
+        window.location.assign(loginUrl);
     }
+
+    function handleLoginHint() {
+        const username = sessionStorage.getItem("customRedditUserscript.loginHint");
+        if (!username || !/\\/login(?:\\/|$)/.test(window.location.pathname)) return;
+
+        const input = document.querySelector(
+            "#login-username, input[name='username'], input[autocomplete='username']"
+        );
+        if (input && !input.value) {
+            input.value = username;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        // Keep the hint only for this login page; password, CAPTCHA and 2FA
+        // remain under Reddit's native authentication UI.
+        sessionStorage.removeItem("customRedditUserscript.loginHint");
+    }
+
+    handleLoginHint();
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -611,7 +585,7 @@ let thumbnail_width = 50;
                 const switchBtn = makeWideBtn("Switch", async () => {
                     accountStatus.textContent = "Switching...";
                     try {
-                        await loginToAccount(account, accountOtp.value.trim());
+                        await loginToAccount(account);
                     } catch (error) {
                         accountStatus.textContent = error && error.message
                             ? error.message
