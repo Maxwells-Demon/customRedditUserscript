@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.0
+// @version      1.1
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -381,7 +381,8 @@ let thumbnail_width = 50;
             align-items:stretch; gap:4px; width:200px;
             font-family:monospace; font-size:11px; color:#ccc;
             background:#1a1a1a; border:1px solid #444; border-radius:5px;
-            padding:8px;
+            padding:8px; max-height:calc(100vh - 50px); overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
         `);
 
         let panelOpen = false;
