@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.4
+// @version      1.5
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -332,9 +332,9 @@ let thumbnail_width = 50;
     function loadAccounts() {
         try {
             const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
-            return Array.isArray(accounts) ? accounts.filter(a =>
-                a && typeof a.username === "string" && typeof a.password === "string"
-            ) : [];
+            return Array.isArray(accounts) ? accounts
+                .filter(a => a && typeof a.username === "string")
+                .map(a => ({ username: a.username })) : [];
         } catch (_) {
             return [];
         }
@@ -527,24 +527,16 @@ let thumbnail_width = 50;
         accountUser.inputMode = "text";
         panel.appendChild(accountUser);
 
-        const accountPassword = el("input", BASE_INPUT + "width:100%;");
-        accountPassword.type = "password";
-        accountPassword.autocomplete = "current-password";
-        accountPassword.placeholder = "password";
-        panel.appendChild(accountPassword);
+        panel.appendChild(el(
+            "div",
+            "font-size:10px; color:#777; text-align:center; line-height:13px;",
+            "Switch opens Reddit login. Password, CAPTCHA and 2FA stay in Reddit."
+        ));
 
-        const accountOtp = el("input", BASE_INPUT + "width:100%;");
-        accountOtp.type = "text";
-        accountOtp.inputMode = "numeric";
-        accountOtp.autocomplete = "one-time-code";
-        accountOtp.placeholder = "2FA code (optional)";
-        panel.appendChild(accountOtp);
-
-        const accountAddBtn = makeWideBtn("Add / Update Account", () => {
+        const accountAddBtn = makeWideBtn("Add Account", () => {
             const username = accountUser.value.trim();
-            const password = accountPassword.value;
-            if (!username || !password) {
-                accountStatus.textContent = "Username and password required.";
+            if (!username) {
+                accountStatus.textContent = "Username required.";
                 return;
             }
 
@@ -552,13 +544,10 @@ let thumbnail_width = 50;
             const existing = accounts.findIndex(a =>
                 a.username.toLowerCase() === username.toLowerCase()
             );
-            const account = { username, password };
 
-            if (existing >= 0) accounts[existing] = account;
-            else accounts.push(account);
-
+            if (existing < 0) accounts.push({ username });
             saveAccounts(accounts);
-            accountPassword.value = "";
+            accountUser.value = "";
             accountStatus.textContent = "Account saved.";
             renderAccounts();
         });
