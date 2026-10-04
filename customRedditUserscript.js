@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.3
+// @version      0.4
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -231,8 +231,6 @@ let thumbnail_width = 50;
         document.head.appendChild(sidebarCSS);
         sidebarCSS.innerHTML = ".side{display:none!important;}";
 
-        const multiredditSidebarCSS = document.createElement("style");
-        document.head.appendChild(multiredditSidebarCSS);
 
         // ── Root container fixed to bottom-right ──────────────────────────────
         const root = el("div", `
@@ -309,16 +307,9 @@ let thumbnail_width = 50;
         panel.appendChild(sideBtn);
 
         // ── Multireddit sidebar toggle ─────────────────────────────────────────
-        let multiredditSidebarVisible = true;
-        const setMultiredditSidebarVisible = visible => {
-            multiredditSidebarVisible = visible;
-            multiredditSidebarCSS.innerHTML = visible
-                ? ".listing-chooser{display:block!important;}"
-                : ".listing-chooser{display:none!important;}";
-            multiredditSidebarBtn.textContent = visible ? "Hide Multireddit Sidebar" : "Show Multireddit Sidebar";
-        };
-        const multiredditSidebarBtn = makeWideBtn("Hide Multireddit Sidebar", () => {
-            setMultiredditSidebarVisible(!multiredditSidebarVisible);
+        const multiredditSidebarBtn = makeWideBtn("Toggle Multireddit Sidebar", () => {
+            const grippy = document.querySelector(".listing-chooser .grippy");
+            if (grippy) grippy.click();
         });
         panel.appendChild(multiredditSidebarBtn);
 
