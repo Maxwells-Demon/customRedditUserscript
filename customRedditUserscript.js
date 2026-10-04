@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.7
+// @version      1.8
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -353,7 +353,7 @@ let thumbnail_width = 50;
 
         // Reddit's login page reuses an existing session. Log out first so
         // the switch cannot simply return to the currently active account.
-        window.location.assign("/logout");
+        window.location.assign("https://old.reddit.com/logout");
     }
 
     function handleLoginHint() {
@@ -366,12 +366,12 @@ let thumbnail_width = 50;
         if (!isLoginPage) {
             // /logout may redirect to the front page. Continue to the native
             // login page after the old Reddit session has been terminated.
-            window.location.replace("/login/");
+            window.location.replace("https://old.reddit.com/login/?dest=https%3A%2F%2Fwww.reddit.com%2F");
             return;
         }
 
         const input = document.querySelector(
-            "#login-username, input[name='username'], input[autocomplete='username']"
+            "#login-username, #user_login, input[name='username'], input[name='user'], input[autocomplete='username']"
         );
 
         if (!input) {
