@@ -199,6 +199,9 @@ let thumbnail_width = 50;
         document.head.appendChild(sidebarCSS);
         sidebarCSS.innerHTML = ".side{display:none!important;}";
 
+        const multiredditSidebarCSS = document.createElement("style");
+        document.head.appendChild(multiredditSidebarCSS);
+
         // ── Root container fixed to bottom-right ──────────────────────────────
         const root = el("div", `
             position:fixed; bottom:12px; right:12px; z-index:99999;
@@ -263,27 +266,29 @@ let thumbnail_width = 50;
         thumbRow.appendChild(thumbP);
         panel.appendChild(thumbRow);
 
-        // ── Sidebar toggle ────────────────────────────────────────────────────
-        let sidebarVisible = false;
-        const setSidebarVisible = visible => {
-            sidebarVisible = visible;
-            sidebarCSS.innerHTML = sidebarVisible ? ".side{display:unset!important;}" : ".side{display:none!important;}";
-            sideBtn.textContent = sidebarVisible ? "Hide Sidebar" : "Show Sidebar";
-            sidebarBtn.textContent = sidebarVisible ? "◀" : "▶";
-            sidebarBtn.title = sidebarVisible ? "Hide sidebar" : "Show sidebar";
-        };
-
-        const sidebarBtn = el("div", `
-            box-sizing:border-box; width:22px; height:22px; line-height:20px;
-            text-align:center; background:#2a2a2a; border:1px solid #555;
-            border-radius:3px; color:#ccc; cursor:pointer; font-family:monospace;
-            font-size:13px; user-select:none;
-        `, "▶");
-        sidebarBtn.title = "Show sidebar";
-        sidebarBtn.onclick = () => setSidebarVisible(!sidebarVisible);
-
+        // ── Right sidebar toggle ────────────────────────────────────────────────
         panel.appendChild(makeHR());
-        const sideBtn = makeWideBtn("Show Sidebar", () => setSidebarVisible(!sidebarVisible));
+        let sidebarVisible = false;
+        const sideBtn = makeWideBtn("Show Sidebar", () => {
+            sidebarVisible = !sidebarVisible;
+            sidebarCSS.innerHTML = sidebarVisible ? ".side{display:unset!important;}" : ".side{display:none!important;}";
+            sideBtn.textContent  = sidebarVisible ? "Hide Sidebar" : "Show Sidebar";
+        });
+        panel.appendChild(sideBtn);
+
+        // ── Multireddit sidebar toggle ─────────────────────────────────────────
+        let multiredditSidebarVisible = true;
+        const setMultiredditSidebarVisible = visible => {
+            multiredditSidebarVisible = visible;
+            multiredditSidebarCSS.innerHTML = visible
+                ? ".listing-chooser{display:block!important;}"
+                : ".listing-chooser{display:none!important;}";
+            multiredditSidebarBtn.textContent = visible ? "Hide Multireddit Sidebar" : "Show Multireddit Sidebar";
+        };
+        const multiredditSidebarBtn = makeWideBtn("Hide Multireddit Sidebar", () => {
+            setMultiredditSidebarVisible(!multiredditSidebarVisible);
+        });
+        panel.appendChild(multiredditSidebarBtn);
 
         // ── Filters ───────────────────────────────────────────────────────────
         panel.appendChild(makeHR());
@@ -352,7 +357,6 @@ let thumbnail_width = 50;
         }));
 
         root.appendChild(panel);
-        root.appendChild(sidebarBtn);
         root.appendChild(collapseBtn);
     })();
 })();
