@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      0.6
+// @version      0.7
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -283,6 +283,23 @@ let thumbnail_width = 50;
             event.preventDefault();
             event.stopPropagation();
             setPanelOpen(!panelOpen);
+        });
+
+        // ── RES account selector Android touch compatibility ──────────────────
+        // RES registers its account selector on a click handler, but its hover/
+        // dropdown implementation is primarily mouse-oriented. On Android,
+        // explicitly translate the touch into the same click handler.
+        waitForElement("#RESAccountSwitcherIcon", icon => {
+            const touchCapable = window.matchMedia("(pointer: coarse)").matches ||
+                "ontouchstart" in window;
+            if (!touchCapable || icon.dataset.customRedditTouchBridge === "1") return;
+
+            icon.dataset.customRedditTouchBridge = "1";
+            icon.addEventListener("touchend", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                icon.click();
+            }, { passive: false });
         });
 
         // ── Thumbnail zoom ────────────────────────────────────────────────────
