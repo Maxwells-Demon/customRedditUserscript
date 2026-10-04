@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.6
+// @version      1.7
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -344,34 +344,50 @@ let thumbnail_width = 50;
         localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
     }
 
-    async function loginToAccount(account) {
-        const destination = window.location.href;
-        const loginUrl = "/login/?dest=" + encodeURIComponent(destination);
+    const LOGIN_HINT_KEY = "customRedditUserscript.loginHint";
+    const LOGIN_PENDING_KEY = "customRedditUserscript.loginPending";
 
-        // Reddit's current authentication uses its native login surface,
-        // including CAPTCHA and account-specific 2FA. The legacy /api/login
-        // password endpoint is no longer a reliable browser login mechanism.
-        // Do not attempt to bypass those controls from the userscript.
-        sessionStorage.setItem("customRedditUserscript.loginHint", account.username);
-        window.location.assign(loginUrl);
+    async function loginToAccount(account) {
+        sessionStorage.setItem(LOGIN_HINT_KEY, account.username);
+        sessionStorage.setItem(LOGIN_PENDING_KEY, "1");
+
+        // Reddit's login page reuses an existing session. Log out first so
+        // the switch cannot simply return to the currently active account.
+        window.location.assign("/logout");
     }
 
     function handleLoginHint() {
-        const username = sessionStorage.getItem("customRedditUserscript.loginHint");
-        if (!username || !/\/login(?:\/|$)/.test(window.location.pathname)) return;
+        const username = sessionStorage.getItem(LOGIN_HINT_KEY);
+        const pending = sessionStorage.getItem(LOGIN_PENDING_KEY);
+        if (!username || pending !== "1") return;
+
+        const isLoginPage = /\/login(?:\/|$)/.test(window.location.pathname);
+
+        if (!isLoginPage) {
+            // /logout may redirect to the front page. Continue to the native
+            // login page after the old Reddit session has been terminated.
+            window.location.replace("/login/");
+            return;
+        }
 
         const input = document.querySelector(
             "#login-username, input[name='username'], input[autocomplete='username']"
         );
-        if (input && !input.value) {
+
+        if (!input) {
+            setTimeout(handleLoginHint, 250);
+            return;
+        }
+
+        if (!input.value) {
             input.value = username;
             input.dispatchEvent(new Event("input", { bubbles: true }));
             input.dispatchEvent(new Event("change", { bubbles: true }));
         }
 
-        // Keep the hint only for this login page; password, CAPTCHA and 2FA
-        // remain under Reddit's native authentication UI.
-        sessionStorage.removeItem("customRedditUserscript.loginHint");
+        // Reddit owns password, CAPTCHA and 2FA handling.
+        sessionStorage.removeItem(LOGIN_HINT_KEY);
+        sessionStorage.removeItem(LOGIN_PENDING_KEY);
     }
 
     handleLoginHint();
