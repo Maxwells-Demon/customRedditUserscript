@@ -401,31 +401,34 @@ let thumbnail_width = 50;
         return false;
     }
 
-    function logoutThroughRedditUI(onReady) {
-        const existingLogout = findLogoutControl();
-        if (existingLogout) {
-            onReady(existingLogout);
-            return;
-        }
-
-        if (!openRedditProfileMenu()) {
-            throw new Error("Reddit profile menu not found.");
-        }
-
-        const started = Date.now();
-        const interval = setInterval(() => {
-            const logout = findLogoutControl();
-            if (logout) {
-                clearInterval(interval);
-                onReady(logout);
+    function logoutThroughRedditUI() {
+        return new Promise((resolve, reject) => {
+            const existingLogout = findLogoutControl();
+            if (existingLogout) {
+                resolve(existingLogout);
                 return;
             }
 
-            if (Date.now() - started >= 5000) {
-                clearInterval(interval);
-                throw new Error("Reddit logout control not found.");
+            if (!openRedditProfileMenu()) {
+                reject(new Error("Reddit profile menu not found."));
+                return;
             }
-        }, 100);
+
+            const started = Date.now();
+            const interval = setInterval(() => {
+                const logout = findLogoutControl();
+                if (logout) {
+                    clearInterval(interval);
+                    resolve(logout);
+                    return;
+                }
+
+                if (Date.now() - started >= 5000) {
+                    clearInterval(interval);
+                    reject(new Error("Reddit logout control not found."));
+                }
+            }, 100);
+        });
     }
 
     async function loginToAccount(account) {
@@ -434,9 +437,8 @@ let thumbnail_width = 50;
 
         // Reddit currently blocks direct logout URLs. Use Reddit's own profile
         // menu and logout control so the browser follows the supported flow.
-        logoutThroughRedditUI(logout => {
-            logout.click();
-        });
+        const logout = await logoutThroughRedditUI();
+        logout.click();
     }
 
     function handleLoginHint() {
