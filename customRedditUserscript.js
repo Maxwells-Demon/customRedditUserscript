@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      1.5
+// @version      1.6
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -358,7 +358,7 @@ let thumbnail_width = 50;
 
     function handleLoginHint() {
         const username = sessionStorage.getItem("customRedditUserscript.loginHint");
-        if (!username || !/\\/login(?:\\/|$)/.test(window.location.pathname)) return;
+        if (!username || !/\/login(?:\/|$)/.test(window.location.pathname)) return;
 
         const input = document.querySelector(
             "#login-username, input[name='username'], input[autocomplete='username']"
