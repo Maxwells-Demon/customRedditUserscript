@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.10
+// @version      2.11
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -793,8 +793,8 @@ let thumbnail_width = 50;
         root.appendChild(panel);
         root.appendChild(collapseBtn);
 
-        // Start with the panel expanded so initialization is immediately visible.
-        setPanelOpen(true);
+        // Start collapsed; the bottom-right button remains visible.
+        setPanelOpen(false);
         window.__customRedditUserscriptDebug.setupCompleted = true;
         window.__customRedditUserscriptDebug.button = collapseBtn;
         window.__customRedditUserscriptDebug.panel = panel;
