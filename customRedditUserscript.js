@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version        2.35
+// @version        2.36
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -359,14 +359,32 @@ let thumbnail_width = 50;
 
     async function listRedditCookies() {
         if (!hasCookieApi()) throw new Error("Cookie API unavailable. Enable Tampermonkey cookie access.");
-        const cookies = await GM.cookie.list({ domain: ".reddit.com" });
+
+        const requests = [
+            { domain: ".reddit.com" },
+            { url: "https://www.reddit.com/" },
+            { url: "https://old.reddit.com/" }
+        ];
         const unique = new Map();
-        (Array.isArray(cookies) ? cookies : []).forEach(cookie => {
-            if (!cookie || !cookie.name || !cookie.domain) return;
-            const key = [cookie.domain, cookie.path || "/", cookie.name,
-                cookie.partitionKey ? JSON.stringify(cookie.partitionKey) : ""].join("|");
-            unique.set(key, cookie);
-        });
+
+        for (const request of requests) {
+            let cookies = [];
+            try {
+                cookies = await GM.cookie.list(request);
+            } catch (_) {
+                continue;
+            }
+            (Array.isArray(cookies) ? cookies : []).forEach(cookie => {
+                if (!cookie || !cookie.name || !cookie.domain) return;
+                const key = [
+                    cookie.domain, cookie.path || "/", cookie.name,
+                    cookie.firstPartyDomain || "",
+                    cookie.partitionKey ? JSON.stringify(cookie.partitionKey) : ""
+                ].join("|");
+                unique.set(key, cookie);
+            });
+        }
+
         return Array.from(unique.values());
     }
 
@@ -428,11 +446,31 @@ let thumbnail_width = 50;
 
     async function clearRedditCookies() {
         const cookies = await listRedditCookies();
-        await Promise.all(cookies.map(cookie => {
-            const details = { url: getCookieUrl(cookie), name: cookie.name };
+
+        for (const cookie of cookies) {
+            const details = {
+                url: getCookieUrl(cookie),
+                name: cookie.name
+            };
+            if (cookie.firstPartyDomain) details.firstPartyDomain = cookie.firstPartyDomain;
             if (cookie.partitionKey) details.partitionKey = cookie.partitionKey;
-            return GM.cookie.delete(details);
-        }));
+
+            try {
+                await GM.cookie.delete(details);
+            } catch (_) {
+                // Continue clearing the remaining Reddit cookies.
+            }
+        }
+
+        // Do not send the user to Reddit's login page while an authenticated
+        // Reddit session is still present. This is the failure mode that
+        // produces Reddit's "already logged in" interstitial.
+        const stillLoggedIn = await getRedditUsername();
+        if (stillLoggedIn) {
+            throw new Error(
+                "Could not clear the current Reddit session. Enable Tampermonkey cookie access (including HttpOnly cookies) and try again."
+            );
+        }
     }
 
     async function restoreRedditCookies(cookies) {
@@ -524,12 +562,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.35",
+        version: "2.36",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.35 script loaded");
+    console.debug("[CustomRedditUserscript] v2.36 script loaded");
 
     function loadSnapshotState(key) {
         try {
