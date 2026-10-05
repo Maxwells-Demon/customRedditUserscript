@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.11
+// @version      2.12
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -349,11 +349,21 @@ let thumbnail_width = 50;
 
     async function isRedditLoggedIn() {
         try {
-            const response = await fetch("/api/v1/me", {
+            // /api/v1/me is OAuth-oriented and can return a successful response
+            // without representing the browser's cookie-authenticated identity.
+            // The legacy /api/me.json endpoint is the authoritative check for
+            // the session used by old Reddit and /api/login.
+            const response = await fetch("/api/me.json?raw_json=1", {
+                method: "GET",
                 credentials: "same-origin",
+                cache: "no-store",
                 headers: { "Accept": "application/json" }
             });
-            return response.ok;
+
+            if (!response.ok) return false;
+
+            const data = await response.json();
+            return typeof data?.data?.name === "string" && data.data.name.length > 0;
         } catch (_) {
             return false;
         }
@@ -427,12 +437,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.8",
+        version: "2.12",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.8 script loaded");
+    console.debug("[CustomRedditUserscript] v2.12 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -798,6 +808,6 @@ let thumbnail_width = 50;
         window.__customRedditUserscriptDebug.setupCompleted = true;
         window.__customRedditUserscriptDebug.button = collapseBtn;
         window.__customRedditUserscriptDebug.panel = panel;
-        console.debug("[CustomRedditUserscript] setup completed; panel expanded");
+        console.debug("[CustomRedditUserscript] setup completed; panel collapsed");
     })();
 })();
