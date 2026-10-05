@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.29
+// @version      2.30
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -508,12 +508,54 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.29",
+        version: "2.30",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
     console.debug("[CustomRedditUserscript] v2.28 script loaded");
+
+    function loadSnapshotSwitch() {
+        try {
+            const value = JSON.parse(localStorage.getItem(SWITCH_STATE_KEY) || "null");
+            if (!value || typeof value !== "object") return null;
+            if (!value.createdAt || Date.now() - value.createdAt > 10 * 60 * 1000) {
+                clearSnapshotSwitch();
+                return null;
+            }
+            return value;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function recoverInterruptedSnapshotSwitch() {
+        const pending = loadSnapshotSwitch();
+        if (!pending) return;
+
+        const currentUsername = await getRedditUsername();
+        if (currentUsername &&
+            pending.username &&
+            currentUsername.toLowerCase() === pending.username.toLowerCase()) {
+            clearSnapshotSwitch();
+            return;
+        }
+
+        if (pending.previousSnapshot && pending.previousUsername) {
+            try {
+                await restoreAccountSnapshot({
+                    username: pending.previousUsername,
+                    snapshot: pending.previousSnapshot
+                });
+            } catch (error) {
+                console.warn("[CustomRedditUserscript] failed to recover previous session:", error);
+            }
+        }
+
+        clearSnapshotSwitch();
+    }
+
+    recoverInterruptedSnapshotSwitch();
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
