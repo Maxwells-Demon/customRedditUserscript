@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.21
+// @version      2.22
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -440,9 +440,12 @@ let thumbnail_width = 50;
             (path === "/login" || path.startsWith("/login/"));
     }
 
-    function getLoginUrl(returnUrl) {
+    function getLoginUrl() {
+        // Use a stable same-origin callback after authentication. Reddit's
+        // current login flow can rewrite/ignore complex dest URLs, while the
+        // pending switch cookie already contains the real return URL.
         return "https://www.reddit.com/login/?dest=" +
-            encodeURIComponent(returnUrl);
+            encodeURIComponent("https://www.reddit.com/");
     }
 
     function submitRedditLogoutForm() {
@@ -495,7 +498,14 @@ let thumbnail_width = 50;
             return;
         }
 
-        if (isRedditLoginPage()) return;
+        if (isRedditLoginPage()) {
+            // Reddit may keep the login URL visible briefly after successful
+            // authentication. Re-check until the browser session is visible.
+            window.setTimeout(() => {
+                handlePendingSwitch();
+            }, 1000);
+            return;
+        }
 
         if (pending.state === "logging_out") {
             // Once the POST logout has completed, continue directly to the
@@ -503,7 +513,7 @@ let thumbnail_width = 50;
             if (!currentUsername) {
                 savePendingSwitch({ ...pending, state: "login_required" });
                 const dest = pending.returnUrl || window.location.href;
-                window.location.replace(getLoginUrl(dest));
+                window.location.replace(getLoginUrl());
                 return;
             }
 
@@ -588,7 +598,7 @@ let thumbnail_width = 50;
             // replacement for the current Reddit authentication flow.
             window.location.replace(getLogoutLandingUrl());
         } else {
-            window.location.href = getLoginUrl(returnUrl);
+            window.location.href = getLoginUrl();
         }
     }
 
@@ -597,7 +607,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.21",
+        version: "2.22",
         setupStarted: false,
         setupCompleted: false,
         error: null
