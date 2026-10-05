@@ -331,12 +331,20 @@ let thumbnail_width = 50;
 
     function loadAccounts() {
         try {
-            const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
-            return Array.isArray(accounts) ? accounts
-                .filter(a => a && typeof a.username === "string")
-                .map(a => ({
-                username: a.username
-            })) : [];
+            const raw = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
+            if (!Array.isArray(raw)) return [];
+
+            const accounts = raw
+                .filter(a => a && typeof a.username === "string" && a.username.trim())
+                .map(a => ({ username: a.username.trim() }));
+
+            // Remove legacy plaintext passwords left by versions <= 2.12.
+            const hadLegacyPasswords = raw.some(a => a && Object.prototype.hasOwnProperty.call(a, "password"));
+            if (hadLegacyPasswords) {
+                localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+            }
+
+            return accounts;
         } catch (_) {
             return [];
         }
@@ -399,7 +407,25 @@ let thumbnail_width = 50;
 
         const currentUsername = await getRedditUsername();
 
+        // Manual "Add Account" login: the user chooses the authentication
+        // method on Reddit, then the resulting identity is saved automatically.
+        if (pending.state === "manual_login") {
+            if (!currentUsername || isRedditLoginPage()) return;
+
+            const accounts = loadAccounts();
+            if (!accounts.some(a => a.username.toLowerCase() === currentUsername.toLowerCase())) {
+                accounts.push({ username: currentUsername });
+                saveAccounts(accounts);
+            }
+            clearPendingSwitch();
+            if (pending.returnUrl && pending.returnUrl !== window.location.href) {
+                window.location.replace(pending.returnUrl);
+            }
+            return;
+        }
+
         if (currentUsername &&
+            pending.username &&
             currentUsername.toLowerCase() === pending.username.toLowerCase()) {
             clearPendingSwitch();
             if (pending.returnUrl && pending.returnUrl !== window.location.href) {
