@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.1
+// @version      2.2
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -543,9 +543,56 @@ let thumbnail_width = 50;
             "input[type='password'], input[autocomplete='current-password']"
         )[0];
 
-        if (password) {
-            password.focus();
+        if (!password) {
+            setTimeout(handleLoginHint, 250);
+            return;
         }
+
+        // Let the browser/password manager populate the password. Do not try
+        // to read or store it. Once a password is present, submit Reddit's
+        // native form and let Reddit handle CAPTCHA/2FA/errors.
+        if (!password.value) {
+            password.focus();
+            setTimeout(handleLoginHint, 500);
+            return;
+        }
+
+        const submitSelectors = [
+            "button[type='submit']",
+            "input[type='submit']",
+            "button"
+        ];
+
+        let submit = null;
+        for (const selector of submitSelectors) {
+            submit = queryLoginElements(selector).find(element => {
+                if (element.disabled) return false;
+                const text = (element.textContent || "").trim();
+                const value = element.getAttribute("value") || "";
+                const label = element.getAttribute("aria-label") || "";
+                return selector !== "button" ||
+                    /^(log ?in|sign ?in|continue)$/i.test(text) ||
+                    /^(log ?in|sign ?in|continue)$/i.test(value) ||
+                    /\b(log ?in|sign ?in|continue)\b/i.test(label);
+            });
+            if (submit) break;
+        }
+
+        if (submit) {
+            submit.click();
+            setTimeout(handleLoginHint, 1000);
+            return;
+        }
+
+        const form = password.form;
+        if (form) {
+            form.requestSubmit ? form.requestSubmit() : form.submit();
+            setTimeout(handleLoginHint, 1000);
+            return;
+        }
+
+        password.focus();
+        setTimeout(handleLoginHint, 500);
     }
 
     handleLoginHint();
