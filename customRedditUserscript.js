@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.27
+// @version      2.28
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -627,12 +627,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.27",
+        version: "2.28",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.27 script loaded");
+    console.debug("[CustomRedditUserscript] v2.28 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -881,6 +881,8 @@ let thumbnail_width = 50;
                     "; wanted u/" + pending.username;
             } else if (pending && pending.state === "login_required") {
                 accountStatus.textContent = "Login required for u/" + pending.username + ".";
+            } else if (pending && pending.state === "login_failed") {
+                accountStatus.textContent = "Login did not complete for u/" + pending.username + ".";
             } else if (pending && pending.state === "logging_out") {
                 accountStatus.textContent = "Logging out before switching to u/" + pending.username + "...";
             } else {
