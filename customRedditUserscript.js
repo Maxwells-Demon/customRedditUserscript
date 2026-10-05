@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.4
+// @version      2.5
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -444,21 +444,29 @@ let thumbnail_width = 50;
 
         // ── Root container fixed to bottom-right ──────────────────────────────
         const root = el("div", `
-            position:fixed; bottom:12px; right:12px; z-index:99999;
-            display:flex; flex-direction:column; align-items:flex-end; gap:2px;
+            position:fixed!important; bottom:12px!important; right:12px!important;
+            z-index:2147483647!important; display:flex!important;
+            flex-direction:column!important; align-items:flex-end!important; gap:2px!important;
+            width:auto!important; height:auto!important; visibility:visible!important;
+            opacity:1!important; pointer-events:auto!important;
         `);
         document.body.appendChild(root);
 
         // ── Open/close panel button ───────────────────────────────────────────
         // Keep this control outside the hidden panel so it remains visible when
         // the panel is collapsed.
-        const collapseBtn = el("div", `
-            box-sizing:border-box; display:flex; align-items:center; justify-content:center;
-            width:28px; height:28px; line-height:26px; flex-shrink:0;
-            text-align:center; background:#2a2a2a; border:1px solid #555;
-            border-radius:3px; color:#ccc; font-family:monospace;
-            font-size:15px; user-select:none; box-shadow:0 1px 4px rgba(0,0,0,.4);
+        const collapseBtn = el("button", `
+            box-sizing:border-box!important; display:flex!important; align-items:center!important;
+            justify-content:center!important; width:32px!important; height:32px!important;
+            min-width:32px!important; min-height:32px!important; padding:0!important;
+            margin:0!important; line-height:30px!important; flex-shrink:0!important;
+            text-align:center!important; background:#2a2a2a!important; border:1px solid #555!important;
+            border-radius:3px!important; color:#ccc!important; font-family:monospace!important;
+            font-size:16px!important; font-weight:normal!important; user-select:none!important;
+            box-shadow:0 1px 4px rgba(0,0,0,.4)!important; visibility:visible!important;
+            opacity:1!important; pointer-events:auto!important; position:relative!important;
         `, "☰");
+        collapseBtn.type = "button";
 
         // ── Panel (collapsed by default) ──────────────────────────────────────
         const panel = el("div", `
