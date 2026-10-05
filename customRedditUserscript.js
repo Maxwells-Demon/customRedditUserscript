@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.19
+// @version      2.20
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -445,8 +445,21 @@ let thumbnail_width = 50;
             encodeURIComponent(returnUrl);
     }
 
-    function getLogoutUrl() {
-        return window.location.origin + "/logout";
+    function submitRedditLogoutForm() {
+        const form = document.querySelector('form.logout[action$="/logout"]') ||
+            document.querySelector('form[action$="/logout"]');
+        if (!form) return false;
+
+        // Reddit's old-reddit logout endpoint expects a POST containing the
+        // current modhash ("uh"). A plain GET navigation to /logout is not
+        // equivalent and may return Method Not Allowed/Forbidden.
+        const submit = HTMLFormElement.prototype.submit;
+        submit.call(form);
+        return true;
+    }
+
+    function getLogoutLandingUrl() {
+        return "https://old.reddit.com/";
     }
 
     async function handlePendingSwitch() {
@@ -483,6 +496,30 @@ let thumbnail_width = 50;
         }
 
         if (isRedditLoginPage()) return;
+
+        if (pending.state === "logging_out") {
+            if (window.location.hostname.toLowerCase() === "old.reddit.com") {
+                if (submitRedditLogoutForm()) return;
+            }
+
+            // The working Reddit logout UI is a POST form on old.reddit.com.
+            // Navigate there first if the current page does not expose it.
+            if (window.location.hostname.toLowerCase() !== "old.reddit.com") {
+                window.location.replace(getLogoutLandingUrl());
+                return;
+            }
+
+            savePendingSwitch({ ...pending, state: "logout_form_missing" });
+            return;
+        }
+
+        if (pending.state === "logout_form_missing") {
+            if (window.location.hostname.toLowerCase() === "old.reddit.com" &&
+                submitRedditLogoutForm()) {
+                return;
+            }
+            return;
+        }
 
         if (window.location.pathname.toLowerCase() === "/logout") {
             savePendingSwitch({ ...pending, state: "login_required" });
@@ -540,7 +577,7 @@ let thumbnail_width = 50;
             // Use normal browser navigation so Reddit can modify its HttpOnly
             // session cookies. Fetch cannot provide a reliable browser-session
             // replacement for the current Reddit authentication flow.
-            window.location.href = getLogoutUrl();
+            window.location.replace(getLogoutLandingUrl());
         } else {
             window.location.href = getLoginUrl(returnUrl);
         }
@@ -551,7 +588,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.19",
+        version: "2.20",
         setupStarted: false,
         setupCompleted: false,
         error: null
