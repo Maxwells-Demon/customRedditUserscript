@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.29
+// @version      2.30
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -491,6 +491,94 @@ let thumbnail_width = 50;
     }
 
     // Snapshot switching never logs out through Reddit; the browser session is restored directly.
+    // ── Custom account switcher UI ───────────────────────────────────────────
+    panel.appendChild(makeHR());
+    const accountTitle = el("div", "font-weight:bold; text-align:center; color:#aaa;", "Accounts");
+    panel.appendChild(accountTitle);
+    const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
+    panel.appendChild(accountStatus);
+    panel.appendChild(el("div", "font-size:10px; color:#777; text-align:center; line-height:13px;", "Sessions are saved locally. Reddit passwords are never stored."));
+
+    const accountAddBtn = makeWideBtn("Save Current Session", async () => {
+        accountStatus.textContent = "Saving session...";
+        try {
+            const username = await saveCurrentAccountSession();
+            accountStatus.textContent = "Session saved for u/" + username + ".";
+            renderAccounts();
+        } catch (error) {
+            accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
+        }
+    });
+    panel.appendChild(accountAddBtn);
+
+    const accountLoginBtn = makeWideBtn("Log In / Add Account", () => {
+        accountStatus.textContent = "Log in normally, then click Save Current Session.";
+        window.location.href = "https://www.reddit.com/login/";
+    });
+    panel.appendChild(accountLoginBtn);
+
+    const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
+    panel.appendChild(accountList);
+
+    async function renderAccounts() {
+        accountList.textContent = "";
+        const accounts = loadAccounts();
+        const currentUsername = await getRedditUsername();
+        accountStatus.textContent = currentUsername ? "Current: u/" + currentUsername : "Not logged in.";
+
+        if (!accounts.length) {
+            accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
+            return;
+        }
+
+        accounts.forEach((account, index) => {
+            const row = el("div", "display:flex; align-items:center; gap:2px; width:100%;");
+            const name = el("div", "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ccc;",
+                account.username + (account.snapshot ? "" : " (no session)"));
+            row.appendChild(name);
+
+            const switchBtn = makeWideBtn("Switch", async () => {
+                accountStatus.textContent = "Switching...";
+                try {
+                    await switchToAccount(account);
+                } catch (error) {
+                    accountStatus.textContent = error && error.message ? error.message : "Account switch failed.";
+                }
+            });
+            switchBtn.style.width = "55px";
+            switchBtn.style.flexShrink = "0";
+            row.appendChild(switchBtn);
+
+            const saveBtn = makeWideBtn("Save", async () => {
+                accountStatus.textContent = "Saving...";
+                try {
+                    const username = await saveCurrentAccountSession();
+                    accountStatus.textContent = username.toLowerCase() === account.username.toLowerCase()
+                        ? "Session updated." : "Currently logged in as u/" + username + ".";
+                    renderAccounts();
+                } catch (error) {
+                    accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
+                }
+            });
+            saveBtn.style.width = "40px";
+            saveBtn.style.flexShrink = "0";
+            row.appendChild(saveBtn);
+
+            const removeBtn = makeWideBtn("×", () => {
+                const current = loadAccounts();
+                current.splice(index, 1);
+                saveAccounts(current);
+                renderAccounts();
+            });
+            removeBtn.title = "Remove saved account";
+            removeBtn.style.width = "24px";
+            removeBtn.style.flexShrink = "0";
+            row.appendChild(removeBtn);
+            accountList.appendChild(row);
+        });
+    }
+
+    renderAccounts();
     // ── Filters ───────────────────────────────────────────────────────────
         panel.appendChild(makeHR());
 
