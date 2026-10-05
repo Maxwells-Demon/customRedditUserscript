@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented in `customRedditUserscript.js` v2.34.
+Implemented in `customRedditUserscript.js` v2.35.
 
 This guide replaces the previous Reddit logout/login account-switching design.
 
@@ -176,7 +176,7 @@ Adding a second account must not start Reddit's login UI while the first account
 8. Restore the original account snapshot.
 9. Return to the page where **Add Account** was started.
 
-The pending operation is stored separately from Reddit's storage and survives the login navigation. The script verifies the restored original session after a full page navigation.
+The pending operation is stored separately from Reddit's storage and survives the login navigation. After the new account is captured, the pending operation is cleared and the newly added account remains active. The original account is not restored automatically.
 
 Passwords, CAPTCHA responses, and 2FA codes are never stored by the script.
 
