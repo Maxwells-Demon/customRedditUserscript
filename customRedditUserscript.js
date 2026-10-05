@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.9
+// @version      2.10
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -197,7 +197,6 @@ let thumbnail_width = 50;
         requestAnimationFrame(() => {
             filterApplyQueued = false;
             applyFilters();
-            applyThumbnailWidth();
         });
     });
 
@@ -466,6 +465,11 @@ let thumbnail_width = 50;
         }
 
         applyThumbnailWidth();
+
+        const thumbnailObserver = new MutationObserver(() => applyThumbnailWidth());
+        if (document.body) {
+            thumbnailObserver.observe(document.body, { childList: true, subtree: true });
+        }
 
         const sidebarCSS = document.createElement("style");
         document.head.appendChild(sidebarCSS);
