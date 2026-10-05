@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.13
+// @version      2.15
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
