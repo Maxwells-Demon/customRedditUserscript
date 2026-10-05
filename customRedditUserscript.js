@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.16
+// @version      2.17
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -397,8 +397,19 @@ let thumbnail_width = 50;
     }
 
     function isRedditLoginPage() {
+        const host = window.location.hostname.toLowerCase();
         const path = window.location.pathname.toLowerCase();
-        return path === "/login" || path.startsWith("/login/");
+        return (host === "www.reddit.com" || host === "reddit.com") &&
+            (path === "/login" || path.startsWith("/login/"));
+    }
+
+    function getLoginUrl(returnUrl) {
+        return "https://www.reddit.com/login/?dest=" +
+            encodeURIComponent(returnUrl);
+    }
+
+    function getLogoutUrl() {
+        return window.location.origin + "/logout";
     }
 
     async function handlePendingSwitch() {
@@ -442,9 +453,7 @@ let thumbnail_width = 50;
                 const latest = loadPendingSwitch();
                 if (!latest) return;
                 const dest = latest.returnUrl || window.location.origin + "/";
-                window.location.replace(
-                    "https://www.reddit.com/login/?dest=" + encodeURIComponent(dest)
-                );
+                window.location.replace(getLoginUrl(dest));
             }, 500);
             return;
         }
@@ -452,9 +461,7 @@ let thumbnail_width = 50;
         if (!currentUsername) {
             savePendingSwitch({ ...pending, state: "login_required" });
             const dest = pending.returnUrl || window.location.href;
-            window.location.replace(
-                "https://www.reddit.com/login/?dest=" + encodeURIComponent(dest)
-            );
+            window.location.replace(getLoginUrl(dest));
             return;
         }
 
@@ -465,6 +472,12 @@ let thumbnail_width = 50;
             state: "wrong_account",
             authenticatedUsername: currentUsername
         });
+        console.warn(
+            "[CustomRedditUserscript] account switch authenticated as wrong account:",
+            currentUsername,
+            "wanted:",
+            pending.username
+        );
     }
 
     async function loginToAccount(account) {
@@ -490,10 +503,9 @@ let thumbnail_width = 50;
             // Use normal browser navigation so Reddit can modify its HttpOnly
             // session cookies. Fetch cannot provide a reliable browser-session
             // replacement for the current Reddit authentication flow.
-            window.location.href = "/logout";
+            window.location.href = getLogoutUrl();
         } else {
-            window.location.href =
-                "https://www.reddit.com/login/?dest=" + encodeURIComponent(returnUrl);
+            window.location.href = getLoginUrl(returnUrl);
         }
     }
 
@@ -502,12 +514,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.16",
+        version: "2.17",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.16 script loaded");
+    console.debug("[CustomRedditUserscript] v2.17 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
