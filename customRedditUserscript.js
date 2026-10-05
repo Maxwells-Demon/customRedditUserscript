@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.8
+// @version      2.9
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -197,6 +197,7 @@ let thumbnail_width = 50;
         requestAnimationFrame(() => {
             filterApplyQueued = false;
             applyFilters();
+            applyThumbnailWidth();
         });
     });
 
@@ -360,18 +361,19 @@ let thumbnail_width = 50;
     }
 
     async function redditLogout() {
+        // old.reddit.com exposes logout as GET /logout. Keep this headless:
+        // fetch it instead of navigating the current tab to the logout page.
         const response = await fetch("/logout", {
-            method: "POST",
+            method: "GET",
             credentials: "same-origin",
-            headers: {
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-            },
-            body: ""
+            cache: "no-store",
+            redirect: "follow"
         });
 
-        // Reddit can return a non-2xx response even when the logout cookie
-        // transition has completed. Verify the actual session state instead.
+        // Give the browser a moment to commit the Set-Cookie transition before
+        // checking the authenticated identity.
+        await new Promise(resolve => setTimeout(resolve, 150));
+
         if (await isRedditLoggedIn()) {
             throw new Error("Reddit logout failed.");
         }
@@ -445,6 +447,25 @@ let thumbnail_width = 50;
 
         const thumbCSS = document.createElement("style");
         document.head.appendChild(thumbCSS);
+
+        function applyThumbnailWidth() {
+            thumbCSS.textContent =
+                `.thumbnail{width:${thumbnail_width}px!important;min-width:${thumbnail_width}px!important;max-width:${thumbnail_width}px!important;}` +
+                `.thumbnail img{width:100%!important;max-width:none!important;height:auto!important;}`;
+            document.querySelectorAll(".thumbnail").forEach(thumbnail => {
+                thumbnail.style.setProperty("width", thumbnail_width + "px", "important");
+                thumbnail.style.setProperty("min-width", thumbnail_width + "px", "important");
+                thumbnail.style.setProperty("max-width", thumbnail_width + "px", "important");
+                const image = thumbnail.querySelector("img");
+                if (image) {
+                    image.style.setProperty("width", "100%", "important");
+                    image.style.setProperty("max-width", "none", "important");
+                    image.style.setProperty("height", "auto", "important");
+                }
+            });
+        }
+
+        applyThumbnailWidth();
 
         const sidebarCSS = document.createElement("style");
         document.head.appendChild(sidebarCSS);
@@ -559,13 +580,15 @@ let thumbnail_width = 50;
 
         thumbM.onclick = () => {
             thumbnail_width = Math.max(20, thumbnail_width - 20);
-            thumbCSS.innerHTML = `.thumbnail{width:${thumbnail_width}px!important;}`;
             thumbValLabel.textContent = thumbnail_width + "px";
+            applyThumbnailWidth();
+            console.debug("[CustomRedditUserscript] thumbnail width:", thumbnail_width);
         };
         thumbP.onclick = () => {
             thumbnail_width += 20;
-            thumbCSS.innerHTML = `.thumbnail{width:${thumbnail_width}px!important;}`;
             thumbValLabel.textContent = thumbnail_width + "px";
+            applyThumbnailWidth();
+            console.debug("[CustomRedditUserscript] thumbnail width:", thumbnail_width);
         };
         thumbRow.appendChild(thumbM);
         thumbRow.appendChild(thumbValLabel);
