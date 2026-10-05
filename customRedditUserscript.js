@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.5
+// @version      2.6
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -450,7 +450,15 @@ let thumbnail_width = 50;
             width:auto!important; height:auto!important; visibility:visible!important;
             opacity:1!important; pointer-events:auto!important;
         `);
-        document.body.appendChild(root);
+        const uiHost = document.createElement("div");
+        uiHost.id = "custom-reddit-userscript-ui";
+        uiHost.style.cssText = "position:fixed;right:12px;bottom:12px;width:0;height:0;z-index:2147483647;display:block;visibility:visible;opacity:1;pointer-events:none;";
+        document.documentElement.appendChild(uiHost);
+        const uiRoot = uiHost.attachShadow({mode:"open"});
+        const resetStyle = document.createElement("style");
+        resetStyle.textContent = ":host{all:initial}*,*::before,*::after{box-sizing:border-box}";
+        uiRoot.appendChild(resetStyle);
+        uiRoot.appendChild(root);
 
         // ── Open/close panel button ───────────────────────────────────────────
         // Keep this control outside the hidden panel so it remains visible when
