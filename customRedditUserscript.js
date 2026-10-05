@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.24
+// @version      2.25
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -442,12 +442,19 @@ let thumbnail_width = 50;
             (path === "/login" || path.startsWith("/login/"));
     }
 
+    function isRedditAuthPage() {
+        const host = window.location.hostname.toLowerCase();
+        return isRedditLoginPage() ||
+            host === "accounts.reddit.com" ||
+            host === "auth.reddit.com";
+    }
+
     function getLoginUrl() {
         // Use a stable same-origin callback after authentication. Reddit's
         // current login flow can rewrite/ignore complex dest URLs, while the
         // pending switch cookie already contains the real return URL.
-        return "https://old.reddit.com/login/?dest=" +
-            encodeURIComponent("https://old.reddit.com/");
+        return "https://www.reddit.com/login/?dest=" +
+            encodeURIComponent("https://www.reddit.com/");
     }
 
     function submitRedditLogoutForm() {
@@ -500,8 +507,9 @@ let thumbnail_width = 50;
             return;
         }
 
-        if (isRedditLoginPage()) {
-            // Reddit may keep the login URL visible briefly after successful
+        if (isRedditAuthPage()) {
+            // Reddit may move authentication between reddit.com and its
+            // dedicated auth hosts. Never redirect away while auth is active.
             // authentication. Re-check until the browser session is visible.
             window.setTimeout(() => {
                 handlePendingSwitch();
@@ -609,7 +617,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.24",
+        version: "2.25",
         setupStarted: false,
         setupCompleted: false,
         error: null
