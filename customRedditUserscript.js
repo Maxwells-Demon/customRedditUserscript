@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.2
+// @version      2.3
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -334,7 +334,10 @@ let thumbnail_width = 50;
             const accounts = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
             return Array.isArray(accounts) ? accounts
                 .filter(a => a && typeof a.username === "string")
-                .map(a => ({ username: a.username })) : [];
+                .map(a => ({
+                username: a.username,
+                password: typeof a.password === "string" ? a.password : ""
+            })) : [];
         } catch (_) {
             return [];
         }
@@ -342,154 +345,6 @@ let thumbnail_width = 50;
 
     function saveAccounts(accounts) {
         localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
-    }
-
-    const LOGIN_HINT_KEY = "customRedditUserscript.loginHint";
-    const LOGIN_PENDING_KEY = "customRedditUserscript.loginPending";
-
-    function findLogoutControl() {
-        const selectors = [
-            'a[href*="logout"]',
-            'button[data-testid="logout-button"]',
-            '[data-menuitem-identifier="logout"]',
-            '[role="menuitem"][aria-label*="log out" i]',
-            '[role="menuitem"][aria-label*="logout" i]'
-        ];
-
-        for (const selector of selectors) {
-            const element = [...document.querySelectorAll(selector)]
-                .find(element => !rootContains(element));
-            if (element) return element;
-        }
-
-        const elements = [...document.querySelectorAll(
-            'button, a, [role="button"], [role="menuitem"], [tabindex]'
-        )];
-
-        return elements.find(element => {
-            if (rootContains(element)) return false;
-            const text = (element.textContent || "").trim().replace(/\\s+/g, " ");
-            const label = element.getAttribute("aria-label") || "";
-            return /^(log ?out|sign ?out)$/i.test(text) ||
-                /\\b(log ?out|sign ?out)\\b/i.test(label);
-        }) || null;
-    }
-
-    function rootContains(element) {
-        return typeof root !== "undefined" && root.contains(element);
-    }
-
-    function openRedditProfileMenu() {
-        const candidates = [
-            'button[aria-label*="user" i]',
-            'button[aria-label*="account" i]',
-            'button[aria-label*="profile" i]',
-            '[data-testid*="user" i][role="button"]',
-            '[data-testid*="account" i][role="button"]',
-            '[id*="header-action-item" i]'
-        ];
-
-        for (const selector of candidates) {
-            const element = [...document.querySelectorAll(selector)]
-                .find(element => !rootContains(element));
-            if (element) {
-                element.click();
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    function logoutThroughRedditUI() {
-        return new Promise((resolve, reject) => {
-            const existingLogout = findLogoutControl();
-            if (existingLogout) {
-                resolve(existingLogout);
-                return;
-            }
-
-            if (!openRedditProfileMenu()) {
-                reject(new Error("Reddit profile menu not found."));
-                return;
-            }
-
-            const started = Date.now();
-            const interval = setInterval(() => {
-                const logout = findLogoutControl();
-                if (logout) {
-                    clearInterval(interval);
-                    resolve(logout);
-                    return;
-                }
-
-                if (Date.now() - started >= 5000) {
-                    clearInterval(interval);
-                    reject(new Error("Reddit logout control not found."));
-                }
-            }, 100);
-        });
-    }
-
-    async function loginToAccount(account) {
-        sessionStorage.setItem(LOGIN_HINT_KEY, account.username);
-        sessionStorage.setItem(LOGIN_PENDING_KEY, "1");
-
-        // Reddit currently blocks direct logout URLs. Use Reddit's own profile
-        // menu and logout control so the browser follows the supported flow.
-        const logout = await logoutThroughRedditUI();
-        logout.click();
-    }
-
-    function queryLoginElements(selector) {
-        const results = [];
-        const visited = new Set();
-
-        function visit(rootNode) {
-            if (!rootNode || visited.has(rootNode)) return;
-            visited.add(rootNode);
-
-            if (rootNode.querySelectorAll) {
-                rootNode.querySelectorAll(selector).forEach(element => results.push(element));
-                rootNode.querySelectorAll("*").forEach(element => {
-                    if (element.shadowRoot) visit(element.shadowRoot);
-                });
-            }
-        }
-
-        visit(document);
-        return results;
-    }
-
-    function findLoginInput() {
-        const selectors = [
-            "#login-username",
-            "#user_login",
-            "input[name='username']",
-            "input[name='user']",
-            "input[autocomplete='username']",
-            "input[type='text'][name*='user' i]",
-            "input[type='email']"
-        ];
-
-        for (const selector of selectors) {
-            const input = queryLoginElements(selector)[0];
-            if (input) return input;
-        }
-
-        return null;
-    }
-
-    function setReactInputValue(input, value) {
-        const prototype = Object.getPrototypeOf(input);
-        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") ||
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-
-        if (descriptor && descriptor.set) descriptor.set.call(input, value);
-        else input.value = value;
-
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     async function isRedditLoggedIn() {
@@ -504,95 +359,69 @@ let thumbnail_width = 50;
         }
     }
 
-    async function handleLoginHint() {
-        const username = sessionStorage.getItem(LOGIN_HINT_KEY);
-        const pending = sessionStorage.getItem(LOGIN_PENDING_KEY);
-        if (!username || pending !== "1") return;
+    async function redditLogout() {
+        const response = await fetch("/logout", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            body: ""
+        });
 
-        const isLoginPage = /\/login(?:\/|$)/.test(window.location.pathname);
-
-        if (!isLoginPage) {
-            if (await isRedditLoggedIn()) {
-                // Login completed. Do not send an authenticated account back
-                // to the login page on the next navigation.
-                sessionStorage.removeItem(LOGIN_HINT_KEY);
-                sessionStorage.removeItem(LOGIN_PENDING_KEY);
-                return;
-            }
-
-            // Logout may land on the front page before the login redirect.
-            window.location.replace("/login/?dest=https%3A%2F%2Fwww.reddit.com%2F");
-            return;
+        // Reddit can return a non-2xx response even when the logout cookie
+        // transition has completed. Verify the actual session state instead.
+        if (await isRedditLoggedIn()) {
+            throw new Error("Reddit logout failed.");
         }
 
-        const input = findLoginInput();
+        return response;
+    }
 
-        if (!input) {
-            setTimeout(handleLoginHint, 250);
-            return;
+    async function redditApiLogin(account) {
+        if (!account.password) {
+            throw new Error("Password required. Remove and re-add this account.");
         }
 
-        if (!input.value) {
-            setReactInputValue(input, username);
+        const body = new URLSearchParams({
+            user: account.username,
+            passwd: account.password,
+            api_type: "json",
+            rem: "on"
+        });
+
+        const response = await fetch("/api/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            body: body.toString()
+        });
+
+        if (!response.ok) {
+            throw new Error("Reddit login request failed (" + response.status + ").");
         }
 
-        // Keep the hint pending until Reddit confirms authentication. This
-        // allows the username to survive Reddit's multi-step login UI while
-        // leaving password, CAPTCHA and 2FA entirely to Reddit.
-        const password = queryLoginElements(
-            "input[type='password'], input[autocomplete='current-password']"
-        )[0];
+        // Do not depend on Reddit's legacy /api/login response shape. The
+        // authoritative result is whether the new session authenticates.
+        if (!(await isRedditLoggedIn())) {
+            throw new Error("Reddit rejected the saved credentials.");
+        }
+    }
 
-        if (!password) {
-            setTimeout(handleLoginHint, 250);
-            return;
+    async function loginToAccount(account) {
+        // Headless account switching: use Reddit's same-origin authentication
+        // endpoints directly. No login page, DOM form, password autofill or
+        // password-manager integration is involved.
+        if (await isRedditLoggedIn()) {
+            await redditLogout();
         }
 
-        // Let the browser/password manager populate the password. Do not try
-        // to read or store it. Once a password is present, submit Reddit's
-        // native form and let Reddit handle CAPTCHA/2FA/errors.
-        if (!password.value) {
-            password.focus();
-            setTimeout(handleLoginHint, 500);
-            return;
-        }
-
-        const submitSelectors = [
-            "button[type='submit']",
-            "input[type='submit']",
-            "button"
-        ];
-
-        let submit = null;
-        for (const selector of submitSelectors) {
-            submit = queryLoginElements(selector).find(element => {
-                if (element.disabled) return false;
-                const text = (element.textContent || "").trim();
-                const value = element.getAttribute("value") || "";
-                const label = element.getAttribute("aria-label") || "";
-                return selector !== "button" ||
-                    /^(log ?in|sign ?in|continue)$/i.test(text) ||
-                    /^(log ?in|sign ?in|continue)$/i.test(value) ||
-                    /\b(log ?in|sign ?in|continue)\b/i.test(label);
-            });
-            if (submit) break;
-        }
-
-        if (submit) {
-            submit.click();
-            setTimeout(handleLoginHint, 1000);
-            return;
-        }
-
-        const form = password.form;
-        if (form) {
-            form.requestSubmit ? form.requestSubmit() : form.submit();
-            setTimeout(handleLoginHint, 1000);
-            return;
-        }
-
-        password.focus();
-        setTimeout(handleLoginHint, 500);
+        await redditApiLogin(account);
+        window.location.reload();
     }
 
     handleLoginHint();
@@ -748,16 +577,27 @@ let thumbnail_width = 50;
         accountUser.inputMode = "text";
         panel.appendChild(accountUser);
 
+        const accountPassword = el("input", BASE_INPUT + "width:100%;");
+        accountPassword.type = "password";
+        accountPassword.autocomplete = "current-password";
+        accountPassword.placeholder = "password";
+        panel.appendChild(accountPassword);
+
         panel.appendChild(el(
             "div",
             "font-size:10px; color:#777; text-align:center; line-height:13px;",
-            "Switch opens Reddit login. Password, CAPTCHA and 2FA stay in Reddit."
+            "Headless switch via Reddit API. Password stored locally in this browser."
         ));
 
         const accountAddBtn = makeWideBtn("Add Account", () => {
             const username = accountUser.value.trim();
+            const password = accountPassword.value;
             if (!username) {
                 accountStatus.textContent = "Username required.";
+                return;
+            }
+            if (!password) {
+                accountStatus.textContent = "Password required.";
                 return;
             }
 
@@ -766,10 +606,15 @@ let thumbnail_width = 50;
                 a.username.toLowerCase() === username.toLowerCase()
             );
 
-            if (existing < 0) accounts.push({ username });
+            if (existing < 0) {
+                accounts.push({ username, password });
+            } else {
+                accounts[existing] = { ...accounts[existing], username, password };
+            }
             saveAccounts(accounts);
             accountUser.value = "";
-            accountStatus.textContent = "Account saved.";
+            accountPassword.value = "";
+            accountStatus.textContent = existing < 0 ? "Account saved." : "Account updated.";
             renderAccounts();
         });
         panel.appendChild(accountAddBtn);
