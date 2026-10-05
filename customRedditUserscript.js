@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version        2.33
+// @version        2.34
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -330,6 +330,7 @@ let thumbnail_width = 50;
     const ACCOUNT_STORAGE_KEY = "customRedditUserscript.accounts";
     const SNAPSHOT_SCHEMA_VERSION = 1;
     const SWITCH_STATE_KEY = "customRedditUserscript.snapshotSwitch";
+    const ADD_ACCOUNT_STATE_KEY = "customRedditUserscript.addAccount";
     const SCRIPT_STORAGE_PREFIX = "customRedditUserscript.";
 
     async function getRedditUsername() {
@@ -503,41 +504,39 @@ let thumbnail_width = 50;
         }
 
         saveSnapshotSwitch({
+            operation: "switch",
             username: targetUsername,
             previousUsername: currentUsername || "",
             previousSnapshot: currentSnapshot,
+            returnUrl: window.location.href,
+            phase: "restore-target",
+            attempts: 0,
             createdAt: Date.now()
         });
 
         await restoreAccountSnapshot(account);
 
-        if (!await verifyCurrentAccount(targetUsername)) {
-            if (currentSnapshot) {
-                await restoreAccountSnapshot({ username: currentUsername, snapshot: currentSnapshot });
-            }
-            clearSnapshotSwitch();
-            throw new Error("Session restore failed; previous session was restored.");
-        }
-
-        clearSnapshotSwitch();
-        window.location.reload();
+        // Cookie changes are made by the userscript manager, not the page.
+        // Verify only after a full navigation so Reddit uses the restored
+        // cookie jar for a new request.
+        window.location.replace(window.location.href);
     }
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.31",
+        version: "2.34",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.31 script loaded");
+    console.debug("[CustomRedditUserscript] v2.34 script loaded");
 
-    function loadSnapshotSwitch() {
+    function loadSnapshotState(key) {
         try {
-            const value = JSON.parse(localStorage.getItem(SWITCH_STATE_KEY) || "null");
+            const value = JSON.parse(localStorage.getItem(key) || "null");
             if (!value || typeof value !== "object") return null;
-            if (!value.createdAt || Date.now() - value.createdAt > 10 * 60 * 1000) {
-                clearSnapshotSwitch();
+            if (!value.createdAt || Date.now() - value.createdAt > 15 * 60 * 1000) {
+                localStorage.removeItem(key);
                 return null;
             }
             return value;
@@ -546,33 +545,136 @@ let thumbnail_width = 50;
         }
     }
 
+    function loadSnapshotSwitch() {
+        return loadSnapshotState(SWITCH_STATE_KEY);
+    }
+
+    function saveAddAccountState(value) {
+        localStorage.setItem(ADD_ACCOUNT_STATE_KEY, JSON.stringify(value));
+    }
+
+    function clearAddAccountState() {
+        localStorage.removeItem(ADD_ACCOUNT_STATE_KEY);
+    }
+
+    function loadAddAccountState() {
+        return loadSnapshotState(ADD_ACCOUNT_STATE_KEY);
+    }
+
+    function clearNonScriptStorage(storage) {
+        const keys = [];
+        for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key && !key.startsWith(SCRIPT_STORAGE_PREFIX)) keys.push(key);
+        }
+        keys.forEach(key => storage.removeItem(key));
+    }
+
+    async function beginAddAccount() {
+        if (!hasCookieApi()) throw new Error("Cookie API unavailable. Enable Tampermonkey cookie access.");
+        const currentUsername = await getRedditUsername();
+        if (!currentUsername) throw new Error("Log in to the current Reddit account first.");
+
+        const currentSnapshot = await captureCurrentSession();
+        updateAccountSnapshot(currentUsername, currentSnapshot);
+
+        saveAddAccountState({
+            operation: "add-account",
+            previousUsername: currentUsername,
+            previousSnapshot: currentSnapshot,
+            returnUrl: window.location.href,
+            phase: "login",
+            createdAt: Date.now()
+        });
+
+        await clearRedditCookies();
+        clearNonScriptStorage(localStorage);
+        clearNonScriptStorage(sessionStorage);
+
+        window.location.href = "https://www.reddit.com/login/";
+    }
+
     async function recoverInterruptedSnapshotSwitch() {
         const pending = loadSnapshotSwitch();
         if (!pending) return;
 
         const currentUsername = await getRedditUsername();
+
+        if (pending.phase === "restore-target") {
+            if (currentUsername &&
+                pending.username &&
+                currentUsername.toLowerCase() === pending.username.toLowerCase()) {
+                clearSnapshotSwitch();
+                return;
+            }
+
+            if (pending.previousSnapshot && pending.previousUsername) {
+                await restoreAccountSnapshot({
+                    username: pending.previousUsername,
+                    snapshot: pending.previousSnapshot
+                });
+            }
+            clearSnapshotSwitch();
+            if (pending.returnUrl) window.location.replace(pending.returnUrl);
+            return;
+        }
+
         if (currentUsername &&
             pending.username &&
             currentUsername.toLowerCase() === pending.username.toLowerCase()) {
             clearSnapshotSwitch();
             return;
         }
+    }
 
-        if (pending.previousSnapshot && pending.previousUsername) {
-            try {
-                await restoreAccountSnapshot({
-                    username: pending.previousUsername,
-                    snapshot: pending.previousSnapshot
-                });
-            } catch (error) {
-                console.warn("[CustomRedditUserscript] failed to recover previous session:", error);
-            }
+    async function recoverInterruptedAddAccount() {
+        const pending = loadAddAccountState();
+        if (!pending) return;
+
+        const currentUsername = await getRedditUsername();
+        if (!currentUsername) return; // Still on the Reddit login UI.
+
+        const previousUsername = pending.previousUsername || "";
+        if (currentUsername.toLowerCase() === previousUsername.toLowerCase()) {
+            return; // Login was not completed with a different account.
         }
 
-        clearSnapshotSwitch();
+        if (pending.phase === "login") {
+            const newSnapshot = await captureCurrentSession();
+            updateAccountSnapshot(currentUsername, newSnapshot);
+
+            saveAddAccountState({
+                ...pending,
+                phase: "restore-original",
+                newUsername: currentUsername,
+                createdAt: Date.now()
+            });
+
+            await restoreAccountSnapshot({
+                username: previousUsername,
+                snapshot: pending.previousSnapshot
+            });
+
+            window.location.replace(pending.returnUrl || "https://www.reddit.com/");
+            return;
+        }
+
+        if (pending.phase === "restore-original") {
+            if (currentUsername.toLowerCase() === previousUsername.toLowerCase()) {
+                clearAddAccountState();
+                return;
+            }
+
+            await restoreAccountSnapshot({
+                username: previousUsername,
+                snapshot: pending.previousSnapshot
+            });
+            window.location.replace(pending.returnUrl || "https://www.reddit.com/");
+        }
     }
 
     recoverInterruptedSnapshotSwitch();
+    recoverInterruptedAddAccount();
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -783,9 +885,13 @@ let thumbnail_width = 50;
         });
         panel.appendChild(accountAddBtn);
 
-        const accountLoginBtn = makeWideBtn("Log In / Add Account", () => {
-            accountStatus.textContent = "Log in normally, then click Save Current Session.";
-            window.location.href = "https://www.reddit.com/login/";
+        const accountLoginBtn = makeWideBtn("Add Account", async () => {
+            accountStatus.textContent = "Preparing login...";
+            try {
+                await beginAddAccount();
+            } catch (error) {
+                accountStatus.textContent = error && error.message ? error.message : "Could not start account login.";
+            }
         });
         panel.appendChild(accountLoginBtn);
 
