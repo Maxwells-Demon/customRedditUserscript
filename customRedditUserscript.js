@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.26
+// @version      2.27
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -483,7 +483,12 @@ let thumbnail_width = 50;
         // Manual "Add Account" login: the user chooses the authentication
         // method on Reddit, then the resulting identity is saved automatically.
         if (pending.state === "manual_login") {
-            if (!currentUsername || isRedditAuthPage()) {\n                if (isRedditAuthPage()) {\n                    window.setTimeout(() => handlePendingSwitch(), 1000);\n                }\n                return;\n            }
+            if (!currentUsername) {
+                if (isRedditAuthPage()) {
+                    window.setTimeout(() => handlePendingSwitch(), 1000);
+                }
+                return;
+            }
 
             const accounts = loadAccounts();
             if (!accounts.some(a => a.username.toLowerCase() === currentUsername.toLowerCase())) {
@@ -562,9 +567,14 @@ let thumbnail_width = 50;
         }
 
         if (!currentUsername) {
+            if (pending.state === "login_required") {
+                savePendingSwitch({ ...pending, state: "login_failed" });
+                console.warn("[CustomRedditUserscript] account switch login did not produce an authenticated session.");
+                return;
+            }
+
             savePendingSwitch({ ...pending, state: "login_required" });
-            const dest = pending.returnUrl || window.location.href;
-            window.location.replace(getLoginUrl(dest));
+            window.location.replace(getLoginUrl());
             return;
         }
 
@@ -617,12 +627,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.26",
+        version: "2.27",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.17 script loaded");
+    console.debug("[CustomRedditUserscript] v2.27 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -879,7 +889,7 @@ let thumbnail_width = 50;
                     : "Not logged in.";
             }
 
-            if (pending && (pending.state === "wrong_account" || pending.state === "login_required")) {
+            if (pending && (pending.state === "wrong_account" || pending.state === "login_required" || pending.state === "login_failed")) {
                 const retryBtn = makeWideBtn("Retry Account Login", async () => {
                     const latest = loadPendingSwitch();
                     if (!latest || !latest.username) return;
