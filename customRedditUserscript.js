@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.15
+// @version      2.16
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -443,7 +443,7 @@ let thumbnail_width = 50;
                 if (!latest) return;
                 const dest = latest.returnUrl || window.location.origin + "/";
                 window.location.replace(
-                    "/login/?dest=" + encodeURIComponent(dest)
+                    "https://www.reddit.com/login/?dest=" + encodeURIComponent(dest)
                 );
             }, 500);
             return;
@@ -453,7 +453,7 @@ let thumbnail_width = 50;
             savePendingSwitch({ ...pending, state: "login_required" });
             const dest = pending.returnUrl || window.location.href;
             window.location.replace(
-                "/login/?dest=" + encodeURIComponent(dest)
+                "https://www.reddit.com/login/?dest=" + encodeURIComponent(dest)
             );
             return;
         }
@@ -493,7 +493,7 @@ let thumbnail_width = 50;
             window.location.href = "/logout";
         } else {
             window.location.href =
-                "/login/?dest=" + encodeURIComponent(returnUrl);
+                "https://www.reddit.com/login/?dest=" + encodeURIComponent(returnUrl);
         }
     }
 
@@ -502,12 +502,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.12",
+        version: "2.16",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.12 script loaded");
+    console.debug("[CustomRedditUserscript] v2.16 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
@@ -745,13 +745,20 @@ let thumbnail_width = 50;
         const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
         panel.appendChild(accountList);
 
-        async function renderAccounts() {
+        async async function renderAccounts() {
             accountList.textContent = "";
             const accounts = loadAccounts();
             const currentUsername = await getRedditUsername();
-            accountStatus.textContent = currentUsername
-                ? "Current: u/" + currentUsername
-                : "Not logged in.";
+            const pending = loadPendingSwitch();
+            if (pending && pending.state === "wrong_account") {
+                accountStatus.textContent =
+                    "Authenticated as u/" + pending.authenticatedUsername +
+                    "; wanted u/" + pending.username;
+            } else {
+                accountStatus.textContent = currentUsername
+                    ? "Current: u/" + currentUsername
+                    : "Not logged in.";
+            }
 
             if (!accounts.length) {
                 accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
