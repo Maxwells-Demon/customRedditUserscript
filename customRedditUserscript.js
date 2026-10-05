@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.25
+// @version      2.26
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -483,7 +483,7 @@ let thumbnail_width = 50;
         // Manual "Add Account" login: the user chooses the authentication
         // method on Reddit, then the resulting identity is saved automatically.
         if (pending.state === "manual_login") {
-            if (!currentUsername || isRedditLoginPage()) return;
+            if (!currentUsername || isRedditAuthPage()) {\n                if (isRedditAuthPage()) {\n                    window.setTimeout(() => handlePendingSwitch(), 1000);\n                }\n                return;\n            }
 
             const accounts = loadAccounts();
             if (!accounts.some(a => a.username.toLowerCase() === currentUsername.toLowerCase())) {
@@ -617,7 +617,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.25",
+        version: "2.26",
         setupStarted: false,
         setupCompleted: false,
         error: null
