@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.23
+// @version      2.24
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -436,7 +436,9 @@ let thumbnail_width = 50;
     function isRedditLoginPage() {
         const host = window.location.hostname.toLowerCase();
         const path = window.location.pathname.toLowerCase();
-        return (host === "www.reddit.com" || host === "reddit.com") &&
+        return (host === "www.reddit.com" ||
+                host === "reddit.com" ||
+                host === "old.reddit.com") &&
             (path === "/login" || path.startsWith("/login/"));
     }
 
@@ -607,7 +609,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.23",
+        version: "2.24",
         setupStarted: false,
         setupCompleted: false,
         error: null
