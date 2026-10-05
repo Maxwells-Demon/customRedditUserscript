@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.7
+// @version      2.8
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -424,10 +424,19 @@ let thumbnail_width = 50;
         window.location.reload();
     }
 
-    handleLoginHint();
+    // Debug instrumentation: expose startup state and report uncaught setup errors.
+    window.__customRedditUserscriptDebug = {
+        version: "2.8",
+        setupStarted: false,
+        setupCompleted: false,
+        error: null
+    };
+    console.debug("[CustomRedditUserscript] v2.8 script loaded");
 
     // ── Main setup ────────────────────────────────────────────────────────────
     (function setup() {
+        window.__customRedditUserscriptDebug.setupStarted = true;
+        console.debug("[CustomRedditUserscript] setup started");
         const css = "body{overflow-x:hidden;} #eu-cookie-policy{display:none;} #progressIndicator{flex-grow:1;} body.with-listing-chooser>.content,body.with-listing-chooser .footer-parent{margin-left:100px;} .listing-chooser{position:fixed!important;overflow:auto!important;top:0!important;} .with-listing-chooser .listing-chooser.initialized{width:100px;padding-right:0;} .listing-chooser ul.multis li{margin-bottom:1px;margin-top:0;margin-left:0;border:0 solid #ccc;border-radius:5px;} .listing-chooser ul.multis li a{padding:.2em 1px;padding-left:3px;} .listing-chooser ul.multis li:hover{margin-left:5px;} .listing-chooser li{border-radius:5px;} .listing-chooser .contents{margin-top:0!important;} .listing-chooser li.selected{margin-right:0;padding-right:0;} .promoted{display:none;} .link{margin-bottom:1px;background-color:rgb(0 0 0/25%)!important;width:99%;margin-left:5px;flex-grow:2;} .link .flat-list{padding:0;} .link .title{font-size:small;font-weight:normal;margin-bottom:0;} .noCtrlF{display:none;} .post-crosspost-button{display:none;} .report-button{display:none!important;} .post-sharing-button{display:none;} .give-gold{display:none;} .entry .buttons li+li{padding-left:0;} .entry .buttons li{padding-right:2px;line-height:1em;} .thumbnail{width:70px;margin-right:10px;margin-bottom:0;} .thumbnail img{width:100%!important;height:auto!important;} .rank{display:none;} .midcol-spacer{width:0!important;} .midcol{margin:0!important;} .grippy{display:none!important;} .NERPageMarker{flex-grow:1;width:100%;} .md{max-width:100%;} .usertext-body{width:50%;} .arrow{margin:1px 0 0 0;}";
 
         const styleEl = document.createElement("style");
@@ -444,7 +453,7 @@ let thumbnail_width = 50;
 
         // ── Root container fixed to bottom-right ──────────────────────────────
         const root = el("div", `
-            position:fixed!important; top:0!important; right:0!important;
+            position:absolute!important; right:0!important; bottom:0!important;
             z-index:2147483647!important; display:flex!important;
             flex-direction:column!important; align-items:flex-end!important; gap:2px!important;
             width:auto!important; height:auto!important; visibility:visible!important;
@@ -452,7 +461,7 @@ let thumbnail_width = 50;
         `);
         const uiHost = document.createElement("div");
         uiHost.id = "custom-reddit-userscript-ui";
-        uiHost.style.cssText = "position:fixed;right:20px;top:70px;width:auto;height:auto;z-index:2147483647;display:block;visibility:visible;opacity:1;pointer-events:auto;";
+        uiHost.style.cssText = "all:initial;position:fixed!important;right:20px!important;bottom:20px!important;top:auto!important;left:auto!important;width:208px!important;height:auto!important;min-width:208px!important;z-index:2147483647!important;display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;";
         document.documentElement.appendChild(uiHost);
         const uiRoot = uiHost.attachShadow({mode:"open"});
         const resetStyle = document.createElement("style");
@@ -756,5 +765,12 @@ let thumbnail_width = 50;
 
         root.appendChild(panel);
         root.appendChild(collapseBtn);
+
+        // Start with the panel expanded so initialization is immediately visible.
+        setPanelOpen(true);
+        window.__customRedditUserscriptDebug.setupCompleted = true;
+        window.__customRedditUserscriptDebug.button = collapseBtn;
+        window.__customRedditUserscriptDebug.panel = panel;
+        console.debug("[CustomRedditUserscript] setup completed; panel expanded");
     })();
 })();
