@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.3
+// @version      2.4
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -449,12 +449,15 @@ let thumbnail_width = 50;
         `);
         document.body.appendChild(root);
 
-        // ── Collapse button ───────────────────────────────────────────────────
+        // ── Open/close panel button ───────────────────────────────────────────
+        // Keep this control outside the hidden panel so it remains visible when
+        // the panel is collapsed.
         const collapseBtn = el("div", `
-            box-sizing:border-box; width:22px; height:22px; line-height:20px;
+            box-sizing:border-box; display:flex; align-items:center; justify-content:center;
+            width:28px; height:28px; line-height:26px; flex-shrink:0;
             text-align:center; background:#2a2a2a; border:1px solid #555;
             border-radius:3px; color:#ccc; font-family:monospace;
-            font-size:13px; user-select:none;
+            font-size:15px; user-select:none; box-shadow:0 1px 4px rgba(0,0,0,.4);
         `, "☰");
 
         // ── Panel (collapsed by default) ──────────────────────────────────────
