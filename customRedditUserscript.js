@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.6
+// @version      2.7
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -444,7 +444,7 @@ let thumbnail_width = 50;
 
         // ── Root container fixed to bottom-right ──────────────────────────────
         const root = el("div", `
-            position:fixed!important; bottom:12px!important; right:12px!important;
+            position:fixed!important; top:0!important; right:0!important;
             z-index:2147483647!important; display:flex!important;
             flex-direction:column!important; align-items:flex-end!important; gap:2px!important;
             width:auto!important; height:auto!important; visibility:visible!important;
@@ -452,7 +452,7 @@ let thumbnail_width = 50;
         `);
         const uiHost = document.createElement("div");
         uiHost.id = "custom-reddit-userscript-ui";
-        uiHost.style.cssText = "position:fixed;right:12px;bottom:12px;width:0;height:0;z-index:2147483647;display:block;visibility:visible;opacity:1;pointer-events:none;";
+        uiHost.style.cssText = "position:fixed;right:20px;top:70px;width:auto;height:auto;z-index:2147483647;display:block;visibility:visible;opacity:1;pointer-events:auto;";
         document.documentElement.appendChild(uiHost);
         const uiRoot = uiHost.attachShadow({mode:"open"});
         const resetStyle = document.createElement("style");
@@ -468,7 +468,7 @@ let thumbnail_width = 50;
             justify-content:center!important; width:32px!important; height:32px!important;
             min-width:32px!important; min-height:32px!important; padding:0!important;
             margin:0!important; line-height:30px!important; flex-shrink:0!important;
-            text-align:center!important; background:#2a2a2a!important; border:1px solid #555!important;
+            text-align:center!important; background:#ff4500!important; border:2px solid #fff!important;
             border-radius:3px!important; color:#ccc!important; font-family:monospace!important;
             font-size:16px!important; font-weight:normal!important; user-select:none!important;
             box-shadow:0 1px 4px rgba(0,0,0,.4)!important; visibility:visible!important;
