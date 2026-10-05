@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version        2.34
+// @version        2.35
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -524,12 +524,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.34",
+        version: "2.35",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.34 script loaded");
+    console.debug("[CustomRedditUserscript] v2.35 script loaded");
 
     function loadSnapshotState(key) {
         try {
@@ -640,36 +640,13 @@ let thumbnail_width = 50;
         }
 
         if (pending.phase === "login") {
+            // The user deliberately logged into the new account. Save that
+            // session, but do not restore the previous account. The new
+            // account remains active until the user explicitly clicks Switch.
             const newSnapshot = await captureCurrentSession();
             updateAccountSnapshot(currentUsername, newSnapshot);
-
-            saveAddAccountState({
-                ...pending,
-                phase: "restore-original",
-                newUsername: currentUsername,
-                createdAt: Date.now()
-            });
-
-            await restoreAccountSnapshot({
-                username: previousUsername,
-                snapshot: pending.previousSnapshot
-            });
-
-            window.location.replace(pending.returnUrl || "https://www.reddit.com/");
+            clearAddAccountState();
             return;
-        }
-
-        if (pending.phase === "restore-original") {
-            if (currentUsername.toLowerCase() === previousUsername.toLowerCase()) {
-                clearAddAccountState();
-                return;
-            }
-
-            await restoreAccountSnapshot({
-                username: previousUsername,
-                snapshot: pending.previousSnapshot
-            });
-            window.location.replace(pending.returnUrl || "https://www.reddit.com/");
         }
     }
 
