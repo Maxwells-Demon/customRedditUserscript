@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.20
+// @version      2.21
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -498,6 +498,15 @@ let thumbnail_width = 50;
         if (isRedditLoginPage()) return;
 
         if (pending.state === "logging_out") {
+            // Once the POST logout has completed, continue directly to the
+            // normal Reddit login flow.
+            if (!currentUsername) {
+                savePendingSwitch({ ...pending, state: "login_required" });
+                const dest = pending.returnUrl || window.location.href;
+                window.location.replace(getLoginUrl(dest));
+                return;
+            }
+
             if (window.location.hostname.toLowerCase() === "old.reddit.com") {
                 if (submitRedditLogoutForm()) return;
             }
@@ -588,7 +597,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.20",
+        version: "2.21",
         setupStarted: false,
         setupCompleted: false,
         error: null
