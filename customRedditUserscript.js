@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.22
+// @version      2.23
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -444,8 +444,8 @@ let thumbnail_width = 50;
         // Use a stable same-origin callback after authentication. Reddit's
         // current login flow can rewrite/ignore complex dest URLs, while the
         // pending switch cookie already contains the real return URL.
-        return "https://www.reddit.com/login/?dest=" +
-            encodeURIComponent("https://www.reddit.com/");
+        return "https://old.reddit.com/login/?dest=" +
+            encodeURIComponent("https://old.reddit.com/");
     }
 
     function submitRedditLogoutForm() {
@@ -607,7 +607,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.22",
+        version: "2.23",
         setupStarted: false,
         setupCompleted: false,
         error: null
