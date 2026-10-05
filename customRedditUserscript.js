@@ -335,8 +335,7 @@ let thumbnail_width = 50;
             return Array.isArray(accounts) ? accounts
                 .filter(a => a && typeof a.username === "string")
                 .map(a => ({
-                username: a.username,
-                password: typeof a.password === "string" ? a.password : ""
+                username: a.username
             })) : [];
         } catch (_) {
             return [];
@@ -347,93 +346,133 @@ let thumbnail_width = 50;
         localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
     }
 
-    async function isRedditLoggedIn() {
+    const PENDING_SWITCH_KEY = "customRedditUserscript.pendingSwitch";
+    const PENDING_SWITCH_MAX_AGE = 15 * 60 * 1000;
+
+    async function getRedditUsername() {
         try {
-            // /api/v1/me is OAuth-oriented and can return a successful response
-            // without representing the browser's cookie-authenticated identity.
-            // The legacy /api/me.json endpoint is the authoritative check for
-            // the session used by old Reddit and /api/login.
             const response = await fetch("/api/me.json?raw_json=1", {
                 method: "GET",
                 credentials: "same-origin",
                 cache: "no-store",
                 headers: { "Accept": "application/json" }
             });
-
-            if (!response.ok) return false;
-
+            if (!response.ok) return null;
             const data = await response.json();
-            return typeof data?.data?.name === "string" && data.data.name.length > 0;
+            const name = data && data.data && data.data.name;
+            return typeof name === "string" && name ? name : null;
         } catch (_) {
-            return false;
+            return null;
         }
     }
 
-    async function redditLogout() {
-        // old.reddit.com exposes logout as GET /logout. Keep this headless:
-        // fetch it instead of navigating the current tab to the logout page.
-        const response = await fetch("/logout", {
-            method: "GET",
-            credentials: "same-origin",
-            cache: "no-store",
-            redirect: "follow"
-        });
-
-        // Give the browser a moment to commit the Set-Cookie transition before
-        // checking the authenticated identity.
-        await new Promise(resolve => setTimeout(resolve, 150));
-
-        if (await isRedditLoggedIn()) {
-            throw new Error("Reddit logout failed.");
+    function loadPendingSwitch() {
+        try {
+            const value = JSON.parse(sessionStorage.getItem(PENDING_SWITCH_KEY) || "null");
+            if (!value || typeof value !== "object") return null;
+            if (!value.createdAt || Date.now() - value.createdAt > PENDING_SWITCH_MAX_AGE) {
+                sessionStorage.removeItem(PENDING_SWITCH_KEY);
+                return null;
+            }
+            return value;
+        } catch (_) {
+            return null;
         }
-
-        return response;
     }
 
-    async function redditApiLogin(account) {
-        if (!account.password) {
-            throw new Error("Password required. Remove and re-add this account.");
+    function savePendingSwitch(value) {
+        sessionStorage.setItem(PENDING_SWITCH_KEY, JSON.stringify(value));
+    }
+
+    function clearPendingSwitch() {
+        sessionStorage.removeItem(PENDING_SWITCH_KEY);
+    }
+
+    function isRedditLoginPage() {
+        const path = window.location.pathname.toLowerCase();
+        return path === "/login" || path.startsWith("/login/");
+    }
+
+    async function handlePendingSwitch() {
+        const pending = loadPendingSwitch();
+        if (!pending) return;
+
+        const currentUsername = await getRedditUsername();
+
+        if (currentUsername &&
+            currentUsername.toLowerCase() === pending.username.toLowerCase()) {
+            clearPendingSwitch();
+            if (pending.returnUrl && pending.returnUrl !== window.location.href) {
+                window.location.replace(pending.returnUrl);
+            }
+            return;
         }
 
-        const body = new URLSearchParams({
-            user: account.username,
-            passwd: account.password,
-            api_type: "json",
-            rem: "on"
+        if (isRedditLoginPage()) return;
+
+        if (window.location.pathname.toLowerCase() === "/logout") {
+            savePendingSwitch({ ...pending, state: "login_required" });
+            window.setTimeout(() => {
+                const latest = loadPendingSwitch();
+                if (!latest) return;
+                const dest = latest.returnUrl || window.location.origin + "/";
+                window.location.replace(
+                    "/login/?dest=" + encodeURIComponent(dest)
+                );
+            }, 500);
+            return;
+        }
+
+        if (!currentUsername) {
+            savePendingSwitch({ ...pending, state: "login_required" });
+            const dest = pending.returnUrl || window.location.href;
+            window.location.replace(
+                "/login/?dest=" + encodeURIComponent(dest)
+            );
+            return;
+        }
+
+        // A different account is authenticated. Do not loop automatically:
+        // the user may have intentionally logged into the wrong account.
+        savePendingSwitch({
+            ...pending,
+            state: "wrong_account",
+            authenticatedUsername: currentUsername
         });
-
-        const response = await fetch("/api/login", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: {
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-            },
-            body: body.toString()
-        });
-
-        if (!response.ok) {
-            throw new Error("Reddit login request failed (" + response.status + ").");
-        }
-
-        // Do not depend on Reddit's legacy /api/login response shape. The
-        // authoritative result is whether the new session authenticates.
-        if (!(await isRedditLoggedIn())) {
-            throw new Error("Reddit rejected the saved credentials.");
-        }
     }
 
     async function loginToAccount(account) {
-        // Headless account switching: use Reddit's same-origin authentication
-        // endpoints directly. No login page, DOM form, password autofill or
-        // password-manager integration is involved.
-        if (await isRedditLoggedIn()) {
-            await redditLogout();
+        const username = account.username.trim();
+        if (!username) throw new Error("Invalid saved account.");
+
+        const returnUrl = window.location.href;
+        const currentUsername = await getRedditUsername();
+
+        if (currentUsername &&
+            currentUsername.toLowerCase() === username.toLowerCase()) {
+            return;
         }
 
-        await redditApiLogin(account);
-        window.location.reload();
+        savePendingSwitch({
+            username,
+            returnUrl,
+            createdAt: Date.now(),
+            state: currentUsername ? "logging_out" : "login_required"
+        });
+
+        if (currentUsername) {
+            // Use normal browser navigation so Reddit can modify its HttpOnly
+            // session cookies. Fetch cannot provide a reliable browser-session
+            // replacement for the current Reddit authentication flow.
+            window.location.href = "/logout";
+        } else {
+            window.location.href =
+                "/login/?dest=" + encodeURIComponent(returnUrl);
+        }
     }
+
+    // Continue an interrupted browser-authentication switch after navigation.
+    handlePendingSwitch();
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
@@ -635,34 +674,16 @@ let thumbnail_width = 50;
         const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
         panel.appendChild(accountStatus);
 
-        const accountUser = el("input", BASE_INPUT + "width:100%;");
-        accountUser.type = "text";
-        accountUser.autocomplete = "username";
-        accountUser.placeholder = "username";
-        accountUser.inputMode = "text";
-        panel.appendChild(accountUser);
-
-        const accountPassword = el("input", BASE_INPUT + "width:100%;");
-        accountPassword.type = "password";
-        accountPassword.autocomplete = "current-password";
-        accountPassword.placeholder = "password";
-        panel.appendChild(accountPassword);
-
         panel.appendChild(el(
             "div",
             "font-size:10px; color:#777; text-align:center; line-height:13px;",
-            "Headless switch via Reddit API. Password stored locally in this browser."
+            "Switches use Reddit's normal browser login. No password is stored by this script."
         ));
 
-        const accountAddBtn = makeWideBtn("Add Account", () => {
-            const username = accountUser.value.trim();
-            const password = accountPassword.value;
+        const accountAddBtn = makeWideBtn("Add Current Account", async () => {
+            const username = await getRedditUsername();
             if (!username) {
-                accountStatus.textContent = "Username required.";
-                return;
-            }
-            if (!password) {
-                accountStatus.textContent = "Password required.";
+                accountStatus.textContent = "Log in first, then add the account.";
                 return;
             }
 
@@ -672,24 +693,39 @@ let thumbnail_width = 50;
             );
 
             if (existing < 0) {
-                accounts.push({ username, password });
+                accounts.push({ username });
             } else {
-                accounts[existing] = { ...accounts[existing], username, password };
+                accounts[existing] = { username };
             }
+
             saveAccounts(accounts);
-            accountUser.value = "";
-            accountPassword.value = "";
-            accountStatus.textContent = existing < 0 ? "Account saved." : "Account updated.";
+            accountStatus.textContent = existing < 0 ? "Account saved." : "Account already saved.";
             renderAccounts();
         });
         panel.appendChild(accountAddBtn);
 
+        const accountLoginBtn = makeWideBtn("Log In / Add Account", () => {
+            const returnUrl = window.location.href;
+            savePendingSwitch({
+                username: "",
+                returnUrl,
+                createdAt: Date.now(),
+                state: "manual_login"
+            });
+            window.location.href = "/login/?dest=" + encodeURIComponent(returnUrl);
+        });
+        panel.appendChild(accountLoginBtn);
+
         const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
         panel.appendChild(accountList);
 
-        function renderAccounts() {
+        async function renderAccounts() {
             accountList.textContent = "";
             const accounts = loadAccounts();
+            const currentUsername = await getRedditUsername();
+            accountStatus.textContent = currentUsername
+                ? "Current: u/" + currentUsername
+                : "Not logged in.";
 
             if (!accounts.length) {
                 accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
