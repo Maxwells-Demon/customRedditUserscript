@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented in `customRedditUserscript.js` v2.30.
+Implemented in `customRedditUserscript.js` v2.34.
 
 This guide replaces the previous Reddit logout/login account-switching design.
 
@@ -164,14 +164,19 @@ This is important because a site's logout operation can invalidate a server-side
 
 ## Add Account flow
 
-The script no longer attempts to infer credentials.
+Adding a second account must not start Reddit's login UI while the first account is still authenticated. The script therefore uses a temporary browser-session handoff:
 
-Use:
+1. Click **Add Account**.
+2. Capture and save the currently authenticated account as a recovery snapshot.
+3. Clear Reddit cookies and non-script Reddit storage.
+4. Navigate to Reddit's normal login UI.
+5. Complete login manually, including CAPTCHA/2FA if required.
+6. After Reddit reports a different authenticated username, capture that new session automatically.
+7. Save the new account snapshot.
+8. Restore the original account snapshot.
+9. Return to the page where **Add Account** was started.
 
-1. **Log In / Add Account**
-2. Complete Reddit's normal login flow manually.
-3. Return to Reddit.
-4. Click **Save Current Session**.
+The pending operation is stored separately from Reddit's storage and survives the login navigation. The script verifies the restored original session after a full page navigation.
 
 Passwords, CAPTCHA responses, and 2FA codes are never stored by the script.
 
