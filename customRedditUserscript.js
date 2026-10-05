@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.0
+// @version      2.1
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -441,7 +441,70 @@ let thumbnail_width = 50;
         logout.click();
     }
 
-    function handleLoginHint() {
+    function queryLoginElements(selector) {
+        const results = [];
+        const visited = new Set();
+
+        function visit(rootNode) {
+            if (!rootNode || visited.has(rootNode)) return;
+            visited.add(rootNode);
+
+            if (rootNode.querySelectorAll) {
+                rootNode.querySelectorAll(selector).forEach(element => results.push(element));
+                rootNode.querySelectorAll("*").forEach(element => {
+                    if (element.shadowRoot) visit(element.shadowRoot);
+                });
+            }
+        }
+
+        visit(document);
+        return results;
+    }
+
+    function findLoginInput() {
+        const selectors = [
+            "#login-username",
+            "#user_login",
+            "input[name='username']",
+            "input[name='user']",
+            "input[autocomplete='username']",
+            "input[type='text'][name*='user' i]",
+            "input[type='email']"
+        ];
+
+        for (const selector of selectors) {
+            const input = queryLoginElements(selector)[0];
+            if (input) return input;
+        }
+
+        return null;
+    }
+
+    function setReactInputValue(input, value) {
+        const prototype = Object.getPrototypeOf(input);
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, "value") ||
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+
+        if (descriptor && descriptor.set) descriptor.set.call(input, value);
+        else input.value = value;
+
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    async function isRedditLoggedIn() {
+        try {
+            const response = await fetch("/api/v1/me", {
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" }
+            });
+            return response.ok;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    async function handleLoginHint() {
         const username = sessionStorage.getItem(LOGIN_HINT_KEY);
         const pending = sessionStorage.getItem(LOGIN_PENDING_KEY);
         if (!username || pending !== "1") return;
@@ -449,15 +512,20 @@ let thumbnail_width = 50;
         const isLoginPage = /\/login(?:\/|$)/.test(window.location.pathname);
 
         if (!isLoginPage) {
-            // /logout may redirect to the front page. Continue to the native
-            // login page after the old Reddit session has been terminated.
+            if (await isRedditLoggedIn()) {
+                // Login completed. Do not send an authenticated account back
+                // to the login page on the next navigation.
+                sessionStorage.removeItem(LOGIN_HINT_KEY);
+                sessionStorage.removeItem(LOGIN_PENDING_KEY);
+                return;
+            }
+
+            // Logout may land on the front page before the login redirect.
             window.location.replace("/login/?dest=https%3A%2F%2Fwww.reddit.com%2F");
             return;
         }
 
-        const input = document.querySelector(
-            "#login-username, #user_login, input[name='username'], input[name='user'], input[autocomplete='username']"
-        );
+        const input = findLoginInput();
 
         if (!input) {
             setTimeout(handleLoginHint, 250);
@@ -465,14 +533,19 @@ let thumbnail_width = 50;
         }
 
         if (!input.value) {
-            input.value = username;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
+            setReactInputValue(input, username);
         }
 
-        // Reddit owns password, CAPTCHA and 2FA handling.
-        sessionStorage.removeItem(LOGIN_HINT_KEY);
-        sessionStorage.removeItem(LOGIN_PENDING_KEY);
+        // Keep the hint pending until Reddit confirms authentication. This
+        // allows the username to survive Reddit's multi-step login UI while
+        // leaving password, CAPTCHA and 2FA entirely to Reddit.
+        const password = queryLoginElements(
+            "input[type='password'], input[autocomplete='current-password']"
+        )[0];
+
+        if (password) {
+            password.focus();
+        }
     }
 
     handleLoginHint();
