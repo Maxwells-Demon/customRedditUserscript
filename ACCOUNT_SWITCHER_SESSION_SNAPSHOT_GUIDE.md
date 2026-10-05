@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented in `customRedditUserscript.js` v2.29.
+Implemented in `customRedditUserscript.js` v2.30.
 
 This guide replaces the previous Reddit logout/login account-switching design.
 
