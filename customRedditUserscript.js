@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.30
+// @version      2.29
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -436,12 +436,18 @@ let thumbnail_width = 50;
         const accounts = loadAccounts();
         const index = accounts.findIndex(a => a.username.toLowerCase() === username.toLowerCase());
         const account = { username, snapshot };
-        if (index < 0) accounts.push(account); else accounts[index] = account;
+        if (index < 0) accounts.push(account);
+        else accounts[index] = account;
         saveAccounts(accounts);
     }
 
-    function saveSnapshotSwitch(value) { localStorage.setItem(SWITCH_STATE_KEY, JSON.stringify(value)); }
-    function clearSnapshotSwitch() { localStorage.removeItem(SWITCH_STATE_KEY); }
+    function saveSnapshotSwitch(value) {
+        localStorage.setItem(SWITCH_STATE_KEY, JSON.stringify(value));
+    }
+
+    function clearSnapshotSwitch() {
+        localStorage.removeItem(SWITCH_STATE_KEY);
+    }
 
     async function restoreAccountSnapshot(account) {
         const snapshot = account && account.snapshot;
@@ -478,108 +484,322 @@ let thumbnail_width = 50;
             currentSnapshot = await captureCurrentSession();
             updateAccountSnapshot(currentUsername, currentSnapshot);
         }
-        saveSnapshotSwitch({ username: targetUsername, previousUsername: currentUsername || "",
-            previousSnapshot: currentSnapshot, createdAt: Date.now() });
+
+        saveSnapshotSwitch({
+            username: targetUsername,
+            previousUsername: currentUsername || "",
+            previousSnapshot: currentSnapshot,
+            createdAt: Date.now()
+        });
+
         await restoreAccountSnapshot(account);
+
         if (!await verifyCurrentAccount(targetUsername)) {
-            if (currentSnapshot) await restoreAccountSnapshot({ username: currentUsername, snapshot: currentSnapshot });
+            if (currentSnapshot) {
+                await restoreAccountSnapshot({ username: currentUsername, snapshot: currentSnapshot });
+            }
             clearSnapshotSwitch();
             throw new Error("Session restore failed; previous session was restored.");
         }
+
         clearSnapshotSwitch();
         window.location.reload();
     }
 
-    // Snapshot switching never logs out through Reddit; the browser session is restored directly.
-    // ── Custom account switcher UI ───────────────────────────────────────────
-    panel.appendChild(makeHR());
-    const accountTitle = el("div", "font-weight:bold; text-align:center; color:#aaa;", "Accounts");
-    panel.appendChild(accountTitle);
-    const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
-    panel.appendChild(accountStatus);
-    panel.appendChild(el("div", "font-size:10px; color:#777; text-align:center; line-height:13px;", "Sessions are saved locally. Reddit passwords are never stored."));
+    // Debug instrumentation: expose startup state and report uncaught setup errors.
+    window.__customRedditUserscriptDebug = {
+        version: "2.29",
+        setupStarted: false,
+        setupCompleted: false,
+        error: null
+    };
+    console.debug("[CustomRedditUserscript] v2.28 script loaded");
 
-    const accountAddBtn = makeWideBtn("Save Current Session", async () => {
-        accountStatus.textContent = "Saving session...";
-        try {
-            const username = await saveCurrentAccountSession();
-            accountStatus.textContent = "Session saved for u/" + username + ".";
-            renderAccounts();
-        } catch (error) {
-            accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
-        }
-    });
-    panel.appendChild(accountAddBtn);
+    // ── Main setup ────────────────────────────────────────────────────────────
+    (function setup() {
+        window.__customRedditUserscriptDebug.setupStarted = true;
+        console.debug("[CustomRedditUserscript] setup started");
+        const css = "body{overflow-x:hidden;} #eu-cookie-policy{display:none;} #progressIndicator{flex-grow:1;} body.with-listing-chooser>.content,body.with-listing-chooser .footer-parent{margin-left:100px;} .listing-chooser{position:fixed!important;overflow:auto!important;top:0!important;} .with-listing-chooser .listing-chooser.initialized{width:100px;padding-right:0;} .listing-chooser ul.multis li{margin-bottom:1px;margin-top:0;margin-left:0;border:0 solid #ccc;border-radius:5px;} .listing-chooser ul.multis li a{padding:.2em 1px;padding-left:3px;} .listing-chooser ul.multis li:hover{margin-left:5px;} .listing-chooser li{border-radius:5px;} .listing-chooser .contents{margin-top:0!important;} .listing-chooser li.selected{margin-right:0;padding-right:0;} .promoted{display:none;} .link{margin-bottom:1px;background-color:rgb(0 0 0/25%)!important;width:99%;margin-left:5px;flex-grow:2;} .link .flat-list{padding:0;} .link .title{font-size:small;font-weight:normal;margin-bottom:0;} .noCtrlF{display:none;} .post-crosspost-button{display:none;} .report-button{display:none!important;} .post-sharing-button{display:none;} .give-gold{display:none;} .entry .buttons li+li{padding-left:0;} .entry .buttons li{padding-right:2px;line-height:1em;} .thumbnail{width:70px;margin-right:10px;margin-bottom:0;} .thumbnail img{width:100%!important;height:auto!important;} .rank{display:none;} .midcol-spacer{width:0!important;} .midcol{margin:0!important;} .grippy{display:none!important;} .NERPageMarker{flex-grow:1;width:100%;} .md{max-width:100%;} .usertext-body{width:50%;} .arrow{margin:1px 0 0 0;}";
 
-    const accountLoginBtn = makeWideBtn("Log In / Add Account", () => {
-        accountStatus.textContent = "Log in normally, then click Save Current Session.";
-        window.location.href = "https://www.reddit.com/login/";
-    });
-    panel.appendChild(accountLoginBtn);
+        const styleEl = document.createElement("style");
+        document.head.appendChild(styleEl);
+        styleEl.innerHTML = css;
 
-    const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
-    panel.appendChild(accountList);
+        const thumbCSS = document.createElement("style");
+        document.head.appendChild(thumbCSS);
 
-    async function renderAccounts() {
-        accountList.textContent = "";
-        const accounts = loadAccounts();
-        const currentUsername = await getRedditUsername();
-        accountStatus.textContent = currentUsername ? "Current: u/" + currentUsername : "Not logged in.";
-
-        if (!accounts.length) {
-            accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
-            return;
-        }
-
-        accounts.forEach((account, index) => {
-            const row = el("div", "display:flex; align-items:center; gap:2px; width:100%;");
-            const name = el("div", "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ccc;",
-                account.username + (account.snapshot ? "" : " (no session)"));
-            row.appendChild(name);
-
-            const switchBtn = makeWideBtn("Switch", async () => {
-                accountStatus.textContent = "Switching...";
-                try {
-                    await switchToAccount(account);
-                } catch (error) {
-                    accountStatus.textContent = error && error.message ? error.message : "Account switch failed.";
+        function applyThumbnailWidth() {
+            thumbCSS.textContent =
+                `.thumbnail{width:${thumbnail_width}px!important;min-width:${thumbnail_width}px!important;max-width:${thumbnail_width}px!important;}` +
+                `.thumbnail img{width:100%!important;max-width:none!important;height:auto!important;}`;
+            document.querySelectorAll(".thumbnail").forEach(thumbnail => {
+                thumbnail.style.setProperty("width", thumbnail_width + "px", "important");
+                thumbnail.style.setProperty("min-width", thumbnail_width + "px", "important");
+                thumbnail.style.setProperty("max-width", thumbnail_width + "px", "important");
+                const image = thumbnail.querySelector("img");
+                if (image) {
+                    image.style.setProperty("width", "100%", "important");
+                    image.style.setProperty("max-width", "none", "important");
+                    image.style.setProperty("height", "auto", "important");
                 }
             });
-            switchBtn.style.width = "55px";
-            switchBtn.style.flexShrink = "0";
-            row.appendChild(switchBtn);
+        }
 
-            const saveBtn = makeWideBtn("Save", async () => {
-                accountStatus.textContent = "Saving...";
-                try {
-                    const username = await saveCurrentAccountSession();
-                    accountStatus.textContent = username.toLowerCase() === account.username.toLowerCase()
-                        ? "Session updated." : "Currently logged in as u/" + username + ".";
-                    renderAccounts();
-                } catch (error) {
-                    accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
-                }
-            });
-            saveBtn.style.width = "40px";
-            saveBtn.style.flexShrink = "0";
-            row.appendChild(saveBtn);
+        applyThumbnailWidth();
 
-            const removeBtn = makeWideBtn("×", () => {
-                const current = loadAccounts();
-                current.splice(index, 1);
-                saveAccounts(current);
-                renderAccounts();
-            });
-            removeBtn.title = "Remove saved account";
-            removeBtn.style.width = "24px";
-            removeBtn.style.flexShrink = "0";
-            row.appendChild(removeBtn);
-            accountList.appendChild(row);
+        const thumbnailObserver = new MutationObserver(() => applyThumbnailWidth());
+        if (document.body) {
+            thumbnailObserver.observe(document.body, { childList: true, subtree: true });
+        }
+
+        const sidebarCSS = document.createElement("style");
+        document.head.appendChild(sidebarCSS);
+        sidebarCSS.innerHTML = ".side{display:none!important;}";
+
+
+        // ── Root container fixed to bottom-right ──────────────────────────────
+        const root = el("div", `
+            position:absolute!important; right:0!important; bottom:0!important;
+            z-index:2147483647!important; display:flex!important;
+            flex-direction:column!important; align-items:flex-end!important; gap:2px!important;
+            width:auto!important; height:auto!important; visibility:visible!important;
+            opacity:1!important; pointer-events:auto!important;
+        `);
+        const uiHost = document.createElement("div");
+        uiHost.id = "custom-reddit-userscript-ui";
+        uiHost.style.cssText = "all:initial;position:fixed!important;right:20px!important;bottom:20px!important;top:auto!important;left:auto!important;width:208px!important;height:auto!important;min-width:208px!important;z-index:2147483647!important;display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;";
+        document.documentElement.appendChild(uiHost);
+        const uiRoot = uiHost.attachShadow({mode:"open"});
+        const resetStyle = document.createElement("style");
+        resetStyle.textContent = ":host{all:initial}*,*::before,*::after{box-sizing:border-box}";
+        uiRoot.appendChild(resetStyle);
+        uiRoot.appendChild(root);
+
+        // ── Open/close panel button ───────────────────────────────────────────
+        // Keep this control outside the hidden panel so it remains visible when
+        // the panel is collapsed.
+        const collapseBtn = el("button", `
+            box-sizing:border-box!important; display:flex!important; align-items:center!important;
+            justify-content:center!important; width:32px!important; height:32px!important;
+            min-width:32px!important; min-height:32px!important; padding:0!important;
+            margin:0!important; line-height:30px!important; flex-shrink:0!important;
+            text-align:center!important; background:#ff4500!important; border:2px solid #fff!important;
+            border-radius:3px!important; color:#ccc!important; font-family:monospace!important;
+            font-size:16px!important; font-weight:normal!important; user-select:none!important;
+            box-shadow:0 1px 4px rgba(0,0,0,.4)!important; visibility:visible!important;
+            opacity:1!important; pointer-events:auto!important; position:relative!important;
+        `, "☰");
+        collapseBtn.type = "button";
+
+        // ── Panel (collapsed by default) ──────────────────────────────────────
+        const panel = el("div", `
+            box-sizing:border-box; display:none; flex-direction:column;
+            align-items:stretch; gap:4px; width:200px;
+            font-family:monospace; font-size:11px; color:#ccc;
+            background:#1a1a1a; border:1px solid #444; border-radius:5px;
+            padding:8px; max-height:calc(100vh - 50px); overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
+        `);
+
+        let panelOpen = false;
+
+        function setPanelOpen(open) {
+            panelOpen = open;
+            panel.style.display = open ? "flex" : "none";
+            collapseBtn.textContent = open ? "✕" : "☰";
+        }
+
+        // Desktop: keep the original hover behaviour only on devices that
+        // actually have a fine pointer and hover capability. Android browsers
+        // can synthesize mouse events for touch input, which would otherwise
+        // immediately reopen/close the panel during a tap.
+        const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        if (canHover) {
+            root.addEventListener("mouseenter", () => setPanelOpen(true));
+            root.addEventListener("mouseleave", () => setPanelOpen(false));
+        }
+
+        // Touch/mobile and keyboard/mouse: tapping/clicking the menu button
+        // explicitly toggles the panel. Do not attach this to the whole root,
+        // otherwise tapping a control inside the panel would toggle it too.
+        collapseBtn.style.cursor = "pointer";
+        collapseBtn.style.touchAction = "manipulation";
+        collapseBtn.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            setPanelOpen(!panelOpen);
         });
-    }
 
-    renderAccounts();
-    // ── Filters ───────────────────────────────────────────────────────────
+        // ── RES account selector Android touch compatibility ──────────────────
+        // RES registers its account selector on a click handler, but its hover/
+        // dropdown implementation is primarily mouse-oriented. On Android,
+        // explicitly translate the touch into the same click handler.
+        waitForElement("#RESAccountSwitcherIcon", icon => {
+            const touchCapable = window.matchMedia("(pointer: coarse)").matches ||
+                "ontouchstart" in window;
+            if (!touchCapable || icon.dataset.customRedditTouchBridge === "1") return;
+
+            icon.dataset.customRedditTouchBridge = "1";
+            icon.addEventListener("touchend", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                icon.click();
+            }, { passive: false });
+        });
+
+        // ── Thumbnail zoom ────────────────────────────────────────────────────
+        const thumbRow      = el("div", ROW);
+        const thumbM        = el("div", `
+            box-sizing:border-box; background:#2a2a2a; border:1px solid #555;
+            border-radius:3px; color:#ccc; cursor:pointer; font-family:monospace;
+            font-size:13px; text-align:center; user-select:none;
+            width:22px; height:22px; line-height:20px; flex-shrink:0;
+        `, "−");
+        const thumbValLabel = el("div", "flex:1; text-align:center; font-size:11px; color:#aaa;", thumbnail_width + "px");
+        const thumbP        = el("div", `
+            box-sizing:border-box; background:#2a2a2a; border:1px solid #555;
+            border-radius:3px; color:#ccc; cursor:pointer; font-family:monospace;
+            font-size:13px; text-align:center; user-select:none;
+            width:22px; height:22px; line-height:20px; flex-shrink:0;
+        `, "+");
+
+        thumbM.onclick = () => {
+            thumbnail_width = Math.max(20, thumbnail_width - 20);
+            thumbValLabel.textContent = thumbnail_width + "px";
+            applyThumbnailWidth();
+            console.debug("[CustomRedditUserscript] thumbnail width:", thumbnail_width);
+        };
+        thumbP.onclick = () => {
+            thumbnail_width += 20;
+            thumbValLabel.textContent = thumbnail_width + "px";
+            applyThumbnailWidth();
+            console.debug("[CustomRedditUserscript] thumbnail width:", thumbnail_width);
+        };
+        thumbRow.appendChild(thumbM);
+        thumbRow.appendChild(thumbValLabel);
+        thumbRow.appendChild(thumbP);
+        panel.appendChild(thumbRow);
+
+        // ── Right sidebar toggle ────────────────────────────────────────────────
+        panel.appendChild(makeHR());
+        let sidebarVisible = false;
+        const sideBtn = makeWideBtn("Show Sidebar", () => {
+            sidebarVisible = !sidebarVisible;
+            sidebarCSS.innerHTML = sidebarVisible ? ".side{display:unset!important;}" : ".side{display:none!important;}";
+            sideBtn.textContent  = sidebarVisible ? "Hide Sidebar" : "Show Sidebar";
+        });
+        panel.appendChild(sideBtn);
+
+        // ── Multireddit sidebar toggle ─────────────────────────────────────────
+        const multiredditSidebarBtn = makeWideBtn("Toggle Multireddit Sidebar", () => {
+            const grippy = document.querySelector(".listing-chooser .grippy");
+            if (grippy) grippy.click();
+        });
+        panel.appendChild(multiredditSidebarBtn);
+
+        // ── Custom account switcher ───────────────────────────────────────────
+        panel.appendChild(makeHR());
+
+        const accountTitle = el("div", "font-weight:bold; text-align:center; color:#aaa;", "Accounts");
+        panel.appendChild(accountTitle);
+
+        const accountStatus = el("div", "font-size:10px; color:#888; text-align:center; min-height:12px;");
+        panel.appendChild(accountStatus);
+
+        panel.appendChild(el(
+            "div",
+            "font-size:10px; color:#777; text-align:center; line-height:13px;",
+            "Switches use Reddit's normal browser login. No password is stored by this script."
+        ));
+
+        const accountAddBtn = makeWideBtn("Save Current Session", async () => {
+            accountStatus.textContent = "Saving session...";
+            try {
+                const username = await saveCurrentAccountSession();
+                accountStatus.textContent = "Session saved for u/" + username + ".";
+                renderAccounts();
+            } catch (error) {
+                accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
+            }
+        });
+        panel.appendChild(accountAddBtn);
+
+        const accountLoginBtn = makeWideBtn("Log In / Add Account", () => {
+            accountStatus.textContent = "Log in normally, then click Save Current Session.";
+            window.location.href = "https://www.reddit.com/login/";
+        });
+        panel.appendChild(accountLoginBtn);
+
+        const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
+        panel.appendChild(accountList);
+
+        async function renderAccounts() {
+            accountList.textContent = "";
+            const accounts = loadAccounts();
+            const currentUsername = await getRedditUsername();
+            accountStatus.textContent = currentUsername
+                ? "Current: u/" + currentUsername
+                : "Not logged in.";
+
+            if (!accounts.length) {
+                accountList.appendChild(el("div", "font-size:10px; color:#777; text-align:center;", "No saved accounts."));
+                return;
+            }
+
+            accounts.forEach((account, index) => {
+                const row = el("div", "display:flex; align-items:center; gap:2px; width:100%;");
+                const name = el(
+                    "div",
+                    "flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#ccc;",
+                    account.username + (account.snapshot ? "" : " (no session)")
+                );
+                row.appendChild(name);
+
+                const switchBtn = makeWideBtn("Switch", async () => {
+                    accountStatus.textContent = "Switching...";
+                    try {
+                        await switchToAccount(account);
+                    } catch (error) {
+                        accountStatus.textContent = error && error.message ? error.message : "Account switch failed.";
+                    }
+                });
+                switchBtn.style.width = "55px";
+                switchBtn.style.flexShrink = "0";
+                row.appendChild(switchBtn);
+
+                const saveBtn = makeWideBtn("Save", async () => {
+                    accountStatus.textContent = "Saving...";
+                    try {
+                        const username = await saveCurrentAccountSession();
+                        accountStatus.textContent = username.toLowerCase() === account.username.toLowerCase()
+                            ? "Session updated."
+                            : "Currently logged in as u/" + username + ".";
+                        renderAccounts();
+                    } catch (error) {
+                        accountStatus.textContent = error && error.message ? error.message : "Session save failed.";
+                    }
+                });
+                saveBtn.style.width = "40px";
+                saveBtn.style.flexShrink = "0";
+                row.appendChild(saveBtn);
+
+                const removeBtn = makeWideBtn("×", () => {
+                    const current = loadAccounts();
+                    current.splice(index, 1);
+                    saveAccounts(current);
+                    renderAccounts();
+                });
+                removeBtn.title = "Remove saved account";
+                removeBtn.style.width = "24px";
+                removeBtn.style.flexShrink = "0";
+                row.appendChild(removeBtn);
+                accountList.appendChild(row);
+            });
+        }
+
+        renderAccounts();
+
+        // ── Filters ───────────────────────────────────────────────────────────
         panel.appendChild(makeHR());
 
         const resetters = [];
