@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.18
+// @version      2.19
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -551,7 +551,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.18",
+        version: "2.19",
         setupStarted: false,
         setupCompleted: false,
         error: null
@@ -827,7 +827,6 @@ let thumbnail_width = 50;
                             : "Account switch failed.";
                     }
                 });
-                panel.appendChild ? null : null;
                 accountList.appendChild(retryBtn);
 
                 const cancelBtn = makeWideBtn("Cancel Switch", () => {
