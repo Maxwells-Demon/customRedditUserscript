@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.30
+// @version      2.31
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -332,6 +332,23 @@ let thumbnail_width = 50;
     const SWITCH_STATE_KEY = "customRedditUserscript.snapshotSwitch";
     const SCRIPT_STORAGE_PREFIX = "customRedditUserscript.";
 
+    async function getRedditUsername() {
+        try {
+            const response = await fetch("/api/me.json?raw_json=1", {
+                method: "GET",
+                credentials: "same-origin",
+                cache: "no-store",
+                headers: { "Accept": "application/json" }
+            });
+            if (!response.ok) return null;
+            const data = await response.json();
+            const username = data && data.data && data.data.name;
+            return typeof username === "string" && username.trim() ? username.trim() : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     function hasCookieApi() {
         return typeof GM !== "undefined" && GM && GM.cookie &&
             typeof GM.cookie.list === "function" &&
@@ -508,12 +525,12 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.30",
+        version: "2.31",
         setupStarted: false,
         setupCompleted: false,
         error: null
     };
-    console.debug("[CustomRedditUserscript] v2.28 script loaded");
+    console.debug("[CustomRedditUserscript] v2.31 script loaded");
 
     function loadSnapshotSwitch() {
         try {
