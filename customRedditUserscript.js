@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CustomRedditUserscript
-// @version      2.17
+// @version      2.18
 // @description
 // @author       levin
 // @match        https://*.reddit.com/*
@@ -355,6 +355,7 @@ let thumbnail_width = 50;
     }
 
     const PENDING_SWITCH_KEY = "customRedditUserscript.pendingSwitch";
+    const PENDING_SWITCH_COOKIE = "customRedditUserscript_pendingSwitch";
     const PENDING_SWITCH_MAX_AGE = 15 * 60 * 1000;
 
     async function getRedditUsername() {
@@ -376,6 +377,24 @@ let thumbnail_width = 50;
 
     function loadPendingSwitch() {
         try {
+            const cookie = document.cookie.split("; ").find(part =>
+                part.startsWith(PENDING_SWITCH_COOKIE + "=")
+            );
+            if (cookie) {
+                const encoded = cookie.slice(PENDING_SWITCH_COOKIE.length + 1);
+                const value = JSON.parse(decodeURIComponent(encoded));
+                if (value && typeof value === "object" && value.createdAt &&
+                    Date.now() - value.createdAt <= PENDING_SWITCH_MAX_AGE) {
+                    return value;
+                }
+                clearPendingSwitchCookie();
+            }
+        } catch (_) {
+            clearPendingSwitchCookie();
+        }
+
+        // Same-origin fallback for browsers that reject the shared-domain cookie.
+        try {
             const value = JSON.parse(sessionStorage.getItem(PENDING_SWITCH_KEY) || "null");
             if (!value || typeof value !== "object") return null;
             if (!value.createdAt || Date.now() - value.createdAt > PENDING_SWITCH_MAX_AGE) {
@@ -388,12 +407,30 @@ let thumbnail_width = 50;
         }
     }
 
+    function savePendingSwitchCookie(value) {
+        document.cookie =
+            PENDING_SWITCH_COOKIE + "=" + encodeURIComponent(JSON.stringify(value)) +
+            "; Max-Age=" + Math.floor(PENDING_SWITCH_MAX_AGE / 1000) +
+            "; Path=/; Domain=.reddit.com; SameSite=Lax";
+    }
+
+    function clearPendingSwitchCookie() {
+        document.cookie =
+            PENDING_SWITCH_COOKIE + "=; Max-Age=0; Path=/; Domain=.reddit.com; SameSite=Lax";
+    }
+
     function savePendingSwitch(value) {
-        sessionStorage.setItem(PENDING_SWITCH_KEY, JSON.stringify(value));
+        savePendingSwitchCookie(value);
+        try {
+            sessionStorage.setItem(PENDING_SWITCH_KEY, JSON.stringify(value));
+        } catch (_) {}
     }
 
     function clearPendingSwitch() {
-        sessionStorage.removeItem(PENDING_SWITCH_KEY);
+        clearPendingSwitchCookie();
+        try {
+            sessionStorage.removeItem(PENDING_SWITCH_KEY);
+        } catch (_) {}
     }
 
     function isRedditLoginPage() {
@@ -514,7 +551,7 @@ let thumbnail_width = 50;
 
     // Debug instrumentation: expose startup state and report uncaught setup errors.
     window.__customRedditUserscriptDebug = {
-        version: "2.17",
+        version: "2.18",
         setupStarted: false,
         setupCompleted: false,
         error: null
@@ -750,14 +787,14 @@ let thumbnail_width = 50;
                 createdAt: Date.now(),
                 state: "manual_login"
             });
-            window.location.href = "/login/?dest=" + encodeURIComponent(returnUrl);
+            window.location.href = getLoginUrl(returnUrl);
         });
         panel.appendChild(accountLoginBtn);
 
         const accountList = el("div", "display:flex; flex-direction:column; gap:2px; width:100%;");
         panel.appendChild(accountList);
 
-        async async function renderAccounts() {
+        async function renderAccounts() {
             accountList.textContent = "";
             const accounts = loadAccounts();
             const currentUsername = await getRedditUsername();
@@ -766,10 +803,39 @@ let thumbnail_width = 50;
                 accountStatus.textContent =
                     "Authenticated as u/" + pending.authenticatedUsername +
                     "; wanted u/" + pending.username;
+            } else if (pending && pending.state === "login_required") {
+                accountStatus.textContent = "Login required for u/" + pending.username + ".";
+            } else if (pending && pending.state === "logging_out") {
+                accountStatus.textContent = "Logging out before switching to u/" + pending.username + "...";
             } else {
                 accountStatus.textContent = currentUsername
                     ? "Current: u/" + currentUsername
                     : "Not logged in.";
+            }
+
+            if (pending && (pending.state === "wrong_account" || pending.state === "login_required")) {
+                const retryBtn = makeWideBtn("Retry Account Login", async () => {
+                    const latest = loadPendingSwitch();
+                    if (!latest || !latest.username) return;
+                    clearPendingSwitch();
+                    accountStatus.textContent = "Retrying...";
+                    try {
+                        await loginToAccount({ username: latest.username });
+                    } catch (error) {
+                        accountStatus.textContent = error && error.message
+                            ? error.message
+                            : "Account switch failed.";
+                    }
+                });
+                panel.appendChild ? null : null;
+                accountList.appendChild(retryBtn);
+
+                const cancelBtn = makeWideBtn("Cancel Switch", () => {
+                    clearPendingSwitch();
+                    accountStatus.textContent = "Account switch cancelled.";
+                    renderAccounts();
+                });
+                accountList.appendChild(cancelBtn);
             }
 
             if (!accounts.length) {
